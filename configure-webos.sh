@@ -15,9 +15,9 @@ export SDL_LIBS="-L/home/stark/HPwebOS/PDK/device/lib -lSDL"
 export OPENAL_CFLAGS="-I/home/stark/HPwebOS/PDK/include"
 export OPENAL_LIBS="-L/home/stark/HPwebOS/PDK/device/lib -lopenal"
 
-# PNG
+# PNG (requires zlib)
 export PNG_CFLAGS="-I/home/stark/HPwebOS/PDK/include"
-export PNG_LIBS="-L/home/stark/HPwebOS/PDK/device/lib -lpng12"
+export PNG_LIBS="-L/home/stark/HPwebOS/PDK/device/lib -lpng12 -lz"
 
 # Ogg/Vorbis/Theora
 export OGGVORBIS_CFLAGS="-I/home/stark/webos-deps/install/include"

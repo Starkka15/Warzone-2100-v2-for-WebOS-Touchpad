@@ -213,6 +213,14 @@ static DROID	*psDominantSelected;
 static BOOL bRadarDragging = false;
 static bool mouseScroll = true;
 
+#ifdef USE_GLES
+/* Touchscreen scroll button states */
+static BOOL touchScrollLeft = false;
+static BOOL touchScrollRight = false;
+static BOOL touchScrollUp = false;
+static BOOL touchScrollDown = false;
+#endif
+
 BOOL	rotActive = false;
 BOOL	gameStats = false;
 
@@ -246,6 +254,17 @@ void setMouseScroll(bool scroll)
 {
 	mouseScroll = scroll;
 }
+
+#ifdef USE_GLES
+/* Set touchscreen scroll button states */
+void setTouchScroll(BOOL left, BOOL right, BOOL up, BOOL down)
+{
+	touchScrollLeft = left;
+	touchScrollRight = right;
+	touchScrollUp = up;
+	touchScrollDown = down;
+}
+#endif
 
 void	setRadarJump(BOOL	val)
 {
@@ -1112,6 +1131,8 @@ void scroll(void)
 		return;
 	}
 
+#ifndef USE_GLES
+	/* Mouse edge scrolling - disabled for touchscreen builds */
 	if (mouseScroll)
 	{
 		/* Scroll left */
@@ -1138,6 +1159,7 @@ void scroll(void)
 			mouseAtTop = true;
 		}
 	}
+#endif
 	if (!keyDown(KEY_LCTRL) && !keyDown(KEY_RCTRL))
 	{
 		/* Scroll left */
@@ -1164,6 +1186,26 @@ void scroll(void)
 			mouseAtTop = true;
 		}
 	}
+
+#ifdef USE_GLES
+	/* Touchscreen scroll buttons */
+	if (touchScrollLeft)
+	{
+		mouseAtLeft = true;
+	}
+	if (touchScrollRight)
+	{
+		mouseAtRight = true;
+	}
+	if (touchScrollUp)
+	{
+		mouseAtBottom = true;
+	}
+	if (touchScrollDown)
+	{
+		mouseAtTop = true;
+	}
+#endif
 	/* Time to update scroll - change to should be time */
 	timeDiff = SDL_GetTicks() - scrollRefTime;
 

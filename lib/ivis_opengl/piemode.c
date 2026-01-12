@@ -84,6 +84,9 @@ BOOL pie_Initialise(void)
 	rendSurface.xpshift	= 10;
 	rendSurface.ypshift	= 10;
 
+#ifdef USE_GLES
+	glesCompatInit();
+#endif
 	pie_SetDefaultStates();
 	iV_RenderAssign(&rendSurface);
 
@@ -106,15 +109,17 @@ void pie_ScreenFlip(int clearMode)
 	GLbitfield clearFlags = 0;
 
 	screenDoDumpToDiskIfRequired();
-	SDL_GL_SwapBuffers();
+	screenSwapBuffers();
 	if (!(clearMode & CLEAR_OFF_AND_NO_BUFFER_DOWNLOAD))
 	{
 		glDepthMask(GL_TRUE);
 		clearFlags = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
+#if !defined(USE_GLES)
 		if (clearMode & CLEAR_SHADOW)
 		{
 			clearFlags |= GL_STENCIL_BUFFER_BIT;
 		}
+#endif
 	}
 	if (clearFlags)
 	{

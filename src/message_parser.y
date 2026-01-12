@@ -31,9 +31,10 @@
 #include "messagely.h"
 #include "text.h"
 
-extern void yyerror(const char* msg);
-void yyerror(const char* msg)
+extern void yyerror(void* ppsViewData, const char* msg);
+void yyerror(void* ppsViewData, const char* msg)
 {
+	(void)ppsViewData;
 	debug(LOG_ERROR, "SMSG file parse error:\n%s at line %d\nText: '%s'", msg, message_get_lineno(), message_get_text());
 }
 
@@ -85,11 +86,11 @@ static void freeViewDataMessageList(VIEWDATAMESSAGE* list)
 	}
 }
 
-#define YYPARSE_PARAM ppsViewData
-
 %}
 
-%name-prefix="message_"
+%parse-param { void* ppsViewData }
+
+%define api.prefix {message_}
 
 %union {
 	char*                   sval;

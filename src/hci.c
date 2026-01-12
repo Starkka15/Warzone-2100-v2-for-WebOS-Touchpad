@@ -74,6 +74,10 @@
 #include "wrappers.h"
 #include "keybind.h"
 
+#ifdef USE_GLES
+#include "lib/widget/button.h"
+#endif
+
 //#define DEBUG_SCROLLTABS 	//enable to see tab scroll button info for buttons
 
 // Empty edit window
@@ -1594,6 +1598,36 @@ INT_RETVAL intRunWidgets(void)
 	SDWORD			i;
 	UDWORD			widgOverID;
 
+#ifdef USE_GLES
+	/* Poll touchscreen scroll buttons */
+	{
+		BOOL scrollLeft = false, scrollRight = false, scrollUp = false, scrollDown = false;
+		W_BUTTON *psButton;
+
+		psButton = (W_BUTTON *)widgGetFromID(psWScreen, IDSCROLL_LEFT);
+		if (psButton && (psButton->state & WBUTS_DOWN))
+		{
+			scrollLeft = true;
+		}
+		psButton = (W_BUTTON *)widgGetFromID(psWScreen, IDSCROLL_RIGHT);
+		if (psButton && (psButton->state & WBUTS_DOWN))
+		{
+			scrollRight = true;
+		}
+		psButton = (W_BUTTON *)widgGetFromID(psWScreen, IDSCROLL_UP);
+		if (psButton && (psButton->state & WBUTS_DOWN))
+		{
+			scrollUp = true;
+		}
+		psButton = (W_BUTTON *)widgGetFromID(psWScreen, IDSCROLL_DOWN);
+		if (psButton && (psButton->state & WBUTS_DOWN))
+		{
+			scrollDown = true;
+		}
+		setTouchScroll(scrollLeft, scrollRight, scrollUp, scrollDown);
+	}
+#endif
+
 	intDoScreenRefresh();
 
 	/* Update the object list if necessary */
@@ -1857,6 +1891,19 @@ INT_RETVAL intRunWidgets(void)
 		intResetScreen(false);
 		psCurrentMsg = NULL;
 		break;
+
+#ifdef USE_GLES
+	/* Menu button for touchscreen devices */
+	case IDMENU_BUTTON:
+		intAddInGameOptions();
+		break;
+	case IDZOOM_IN:
+		kf_ZoomIn();
+		break;
+	case IDZOOM_OUT:
+		kf_ZoomOut();
+		break;
+#endif
 
 	/*Transporter button pressed - OFFWORLD Mission Maps ONLY *********/
 	case IDTRANTIMER_BUTTON:
@@ -3827,6 +3874,110 @@ BOOL intAddReticule(void)
 		{
 			return false;
 		}
+
+#ifdef USE_GLES
+		/* Menu button for touchscreen devices (no ESC key) */
+		sButInit.formID = 0;
+		sButInit.style = WBUT_PLAIN | WBUT_TXTCENTRE;
+		sButInit.id = IDMENU_BUTTON;
+		sButInit.x = pie_GetVideoBufferWidth() - 60;
+		sButInit.y = 10;
+		sButInit.width = 50;
+		sButInit.height = 20;
+		sButInit.pTip = _("Menu");
+		sButInit.FontID = font_regular;
+		sButInit.pText = "MENU";
+		sButInit.pDisplay = intDisplayTouchButton;
+		sButInit.UserData = 0;
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		/* Scroll buttons on screen edges */
+		sButInit.style = WBUT_PLAIN | WBUT_TXTCENTRE;
+		sButInit.FontID = font_regular;
+		sButInit.pDisplay = intDisplayTouchButton;
+		sButInit.UserData = 0;
+
+		/* Left arrow - left edge, middle height */
+		sButInit.id = IDSCROLL_LEFT;
+		sButInit.x = 5;
+		sButInit.y = pie_GetVideoBufferHeight() / 2 - 20;
+		sButInit.width = 40;
+		sButInit.height = 40;
+		sButInit.pTip = _("Scroll Left");
+		sButInit.pText = "<";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		/* Right arrow - right edge, middle height */
+		sButInit.id = IDSCROLL_RIGHT;
+		sButInit.x = pie_GetVideoBufferWidth() - 45;
+		sButInit.y = pie_GetVideoBufferHeight() / 2 - 20;
+		sButInit.width = 40;
+		sButInit.height = 40;
+		sButInit.pTip = _("Scroll Right");
+		sButInit.pText = ">";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		/* Up arrow - top edge, middle width */
+		sButInit.id = IDSCROLL_UP;
+		sButInit.x = pie_GetVideoBufferWidth() / 2 - 20;
+		sButInit.y = 5;
+		sButInit.width = 40;
+		sButInit.height = 40;
+		sButInit.pTip = _("Scroll Up");
+		sButInit.pText = "^";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		/* Down arrow - bottom edge, middle width */
+		sButInit.id = IDSCROLL_DOWN;
+		sButInit.x = pie_GetVideoBufferWidth() / 2 - 20;
+		sButInit.y = pie_GetVideoBufferHeight() - 45;
+		sButInit.width = 40;
+		sButInit.height = 40;
+		sButInit.pTip = _("Scroll Down");
+		sButInit.pText = "v";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		/* Zoom buttons - top right, below menu */
+		sButInit.id = IDZOOM_IN;
+		sButInit.x = pie_GetVideoBufferWidth() - 60;
+		sButInit.y = 40;
+		sButInit.width = 25;
+		sButInit.height = 25;
+		sButInit.pTip = _("Zoom In");
+		sButInit.pText = "+";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+
+		sButInit.id = IDZOOM_OUT;
+		sButInit.x = pie_GetVideoBufferWidth() - 30;
+		sButInit.y = 40;
+		sButInit.width = 25;
+		sButInit.height = 25;
+		sButInit.pTip = _("Zoom Out");
+		sButInit.pText = "-";
+		if (!widgAddButton(psWScreen, &sButInit))
+		{
+			return false;
+		}
+#endif
+
 	//	intCheckReticuleButtons();
 		ReticuleUp = true;
 	}
@@ -3838,6 +3989,15 @@ void intRemoveReticule(void)
 {
 	if(ReticuleUp == true) {
 		widgDelete(psWScreen,IDRET_FORM);		// remove reticule
+#ifdef USE_GLES
+		widgDelete(psWScreen,IDMENU_BUTTON);	// remove menu button
+		widgDelete(psWScreen,IDSCROLL_LEFT);
+		widgDelete(psWScreen,IDSCROLL_RIGHT);
+		widgDelete(psWScreen,IDSCROLL_UP);
+		widgDelete(psWScreen,IDSCROLL_DOWN);
+		widgDelete(psWScreen,IDZOOM_IN);
+		widgDelete(psWScreen,IDZOOM_OUT);
+#endif
 		ReticuleUp = false;
 	}
 }

@@ -105,14 +105,26 @@ static int newPage(const char *name, int level, int width, int height, int count
 	pie_SetTexturePage(texPage);
 
 	// Specify first and last mipmap level to be used
+#ifndef USE_GLES
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipmap_levels - 1);
+#endif
 
 	// debug(LOG_TEXTURE, "newPage: glTexImage2D(page=%d, level=%d) opengl id=%u", texPage, level, _TEX_PAGE[texPage].id);
+#ifdef USE_GLES
+	/* GLES 1.1: Use GL_RGBA for both internal and external format, no mipmaps */
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+	             GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+#else
 	glTexImage2D(GL_TEXTURE_2D, level, wz_texture_compression, width, height, 0,
 	             GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+#endif
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+#ifdef USE_GLES
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+#else
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+#endif
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -166,6 +178,23 @@ bool texLoad(const char *fileName)
 		mipmap_levels--;
 		debug(LOG_TEXTURE, "Downgrading texture quality to %d due to user setting %d", mipmap_max, maxTextureSize);
 	}
+
+#ifdef USE_GLES
+	/*
+	 * GLES FIX: Only load mipmap level 0.
+	 *
+	 * On GLES, newPage() always creates texture level 0 regardless of the
+	 * 'level' parameter. This means each mipmap iteration would recreate
+	 * level 0 with progressively smaller sizes, overwriting the previous
+	 * content. By the end, the texture would contain only the smallest
+	 * mipmap tiles but tileTexInfo would have UV coords for the largest.
+	 *
+	 * Since we use GL_LINEAR (not GL_LINEAR_MIPMAP_LINEAR) on GLES anyway,
+	 * we only need the base mipmap level.
+	 */
+	mipmap_levels = 1;
+	debug(LOG_TEXTURE, "GLES: Using single mipmap level only");
+#endif
 
 	/* Get and set radar colours */
 

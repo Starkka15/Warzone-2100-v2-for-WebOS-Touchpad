@@ -105,7 +105,7 @@ NULL		{ message_lval.sval = NULL; return NULL_T;      }
 	/* Match quoted text */
 \"							{ BEGIN QUOTE; }
 <QUOTE>\"					{ BEGIN 0; }
-<QUOTE>\n					{ message_error("Unexpected end of line in string"); }
+<QUOTE>\n					{ message_error(NULL, "Unexpected end of line in string"); }
 <QUOTE>[^\"\n]*				{
 								message_lval.sval = strdup(yytext);
 								return QTEXT_T;

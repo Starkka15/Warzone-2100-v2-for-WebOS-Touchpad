@@ -1,0 +1,10 @@
+Package: org.wz2100.warzone2100
+Version: 2.3.0
+Section: games
+Priority: optional
+Architecture: arm
+Maintainer: Warzone 2100 Project
+Description: Warzone 2100 - Real-time strategy game
+ A free and open source real-time strategy game.
+ Set in the aftermath of nuclear war, lead your forces
+ to rebuild civilization.

@@ -85,7 +85,9 @@ void pie_BeginLighting(const Vector3f * light)
 	glEnable(GL_LIGHT0);
 
 //	lighting = true;
-	shadows = true;
+#ifndef USE_GLES
+	shadows = true;  // Shadows use stencil buffer not available in GLES 1.1
+#endif
 }
 
 void pie_EndLighting(void)
@@ -131,7 +133,16 @@ static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, WZ_DE
 {
 	Vector3f *pVertices, *pPixels, scrPoints[pie_MAX_VERTICES];
 	iIMDPoly *pPolys;
+#ifdef USE_GLES
+	BOOL light = false;  /* Disable lighting on GLES for now */
+#else
 	BOOL light = lighting;
+#endif
+
+#ifdef USE_GLES
+	/* Force texturing to be enabled */
+	glEnable(GL_TEXTURE_2D);
+#endif
 
 	pie_SetAlphaTest(true);
 
@@ -841,15 +852,18 @@ void pie_DrawTerrain(int x1, int y1, int x2, int y2)
 	glTexCoordPointer(TEXCOORD_COMPONENTS, GL_FLOAT, 0, aTexCoord);
 	glVertexPointer(VERTEX_COMPONENTS, GL_FLOAT, 0, aVertex);
 	glMatrixMode(GL_TEXTURE);
+	glPushMatrix();
 	glLoadIdentity();
 	for (y = y1; y < y2; y++)
 	{
 		glDrawArrays(GL_TRIANGLES, (y * allocX + x1) * VERTICES_PER_TILE, (x2 - x1) * VERTICES_PER_TILE);
 	}
+	glPopMatrix();
 	pie_ClearArrays();
 	glDisableClientState(GL_COLOR_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glMatrixMode(GL_MODELVIEW);
 }
 
 // index gives us the triangle

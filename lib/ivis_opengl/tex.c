@@ -139,7 +139,12 @@ int pie_AddTexPage(iV_Image *s, const char* filename, int slot, int maxTextureSi
 	s->bmp = NULL;
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+#ifdef USE_GLES
+	/* Use simpler filtering on GLES - mipmap generation may not be reliable */
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+#else
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+#endif
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	// Use anisotropic filtering, if available, but only max 4.0 to reduce processor burden

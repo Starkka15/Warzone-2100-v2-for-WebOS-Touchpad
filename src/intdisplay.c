@@ -3343,3 +3343,79 @@ void intDisplayAllyIcon(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, WZ_DEC
 
 	iV_DrawImage(IntImages, IMAGE_DES_BODYPOINTS, x, y);
 }
+
+#ifdef USE_GLES
+/* Display function for touchscreen scroll/zoom buttons */
+void intDisplayTouchButton(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, WZ_DECL_UNUSED PIELIGHT *pColours)
+{
+	W_BUTTON	*psButton = (W_BUTTON *)psWidget;
+	SDWORD		x0, y0, x1, y1;
+	BOOL		isDown, isHilight;
+	PIELIGHT	bgColour, borderColour;
+
+	x0 = psWidget->x + xOffset;
+	y0 = psWidget->y + yOffset;
+	x1 = x0 + psWidget->width;
+	y1 = y0 + psWidget->height;
+
+	isDown = (psButton->state & (WBUTS_DOWN | WBUTS_CLICKLOCK)) != 0;
+	isHilight = (psButton->state & WBUTS_HILITE) != 0;
+
+	/* Semi-transparent dark background */
+	bgColour.byte.r = 0;
+	bgColour.byte.g = 0;
+	bgColour.byte.b = 0;
+	bgColour.byte.a = isDown ? 200 : 128;  /* More opaque when pressed */
+
+	pie_UniTransBoxFill(x0, y0, x1, y1, bgColour);
+
+	/* Border - brighter when highlighted or pressed */
+	if (isDown)
+	{
+		borderColour.byte.r = 255;
+		borderColour.byte.g = 200;
+		borderColour.byte.b = 0;
+		borderColour.byte.a = 255;
+	}
+	else if (isHilight)
+	{
+		borderColour.byte.r = 200;
+		borderColour.byte.g = 200;
+		borderColour.byte.b = 200;
+		borderColour.byte.a = 255;
+	}
+	else
+	{
+		borderColour.byte.r = 100;
+		borderColour.byte.g = 100;
+		borderColour.byte.b = 100;
+		borderColour.byte.a = 200;
+	}
+
+	/* Draw border lines */
+	iV_Line(x0, y0, x1, y0, borderColour);  /* Top */
+	iV_Line(x0, y1, x1, y1, borderColour);  /* Bottom */
+	iV_Line(x0, y0, x0, y1, borderColour);  /* Left */
+	iV_Line(x1, y0, x1, y1, borderColour);  /* Right */
+
+	/* Draw text centered */
+	if (psButton->pText && psButton->pText[0] != '\0')
+	{
+		int textWidth, textX, textY;
+		PIELIGHT textColour;
+
+		iV_SetFont(psButton->FontID);
+		textWidth = iV_GetTextWidth(psButton->pText);
+		textX = x0 + (psWidget->width - textWidth) / 2;
+		textY = y0 + (psWidget->height - iV_GetTextLineSize()) / 2 - iV_GetTextAboveBase();
+
+		textColour.byte.r = 255;
+		textColour.byte.g = 255;
+		textColour.byte.b = 255;
+		textColour.byte.a = isDown ? 255 : 200;
+
+		iV_SetTextColour(textColour);
+		iV_DrawText(psButton->pText, textX, textY);
+	}
+}
+#endif

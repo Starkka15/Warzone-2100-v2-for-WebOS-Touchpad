@@ -28,6 +28,10 @@
  */
 #include "frame.h"
 
+#ifdef USE_GLES
+#include "PDL.h"
+#endif
+
 #include "frameint.h"
 #include "frameresource.h"
 #include "input.h"
@@ -222,16 +226,10 @@ bool frameInitialise(
 					bool fullScreen,		// Whether to start full screen or windowed
 					bool vsync)				// If to sync to vblank or not
 {
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-	uint32_t rmask = 0xff000000;
-	uint32_t gmask = 0x00ff0000;
-	uint32_t bmask = 0x0000ff00;
-	uint32_t amask = 0x000000ff;
-#else
-	uint32_t rmask = 0x000000ff;
-	uint32_t gmask = 0x0000ff00;
-	uint32_t bmask = 0x00ff0000;
-	uint32_t amask = 0xff000000;
+#ifdef USE_GLES
+	/* webOS: Initialize PDL before SDL for proper compositor integration */
+	PDL_Init(0);
+	PDL_SetOrientation(PDL_ORIENTATION_270);  /* Landscape mode */
 #endif
 
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -240,9 +238,24 @@ bool frameInitialise(
 		return false;
 	}
 
-	SDL_WM_SetIcon(SDL_CreateRGBSurfaceFrom((void*)wz2100icon.pixel_data, wz2100icon.width, wz2100icon.height, wz2100icon.bytes_per_pixel * 8,
-	                                        wz2100icon.width * wz2100icon.bytes_per_pixel, rmask, gmask, bmask, amask), NULL);
-	SDL_WM_SetCaption(pWindowName, NULL);
+#ifndef USE_GLES
+	{
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+		uint32_t rmask = 0xff000000;
+		uint32_t gmask = 0x00ff0000;
+		uint32_t bmask = 0x0000ff00;
+		uint32_t amask = 0x000000ff;
+#else
+		uint32_t rmask = 0x000000ff;
+		uint32_t gmask = 0x0000ff00;
+		uint32_t bmask = 0x00ff0000;
+		uint32_t amask = 0xff000000;
+#endif
+		SDL_WM_SetIcon(SDL_CreateRGBSurfaceFrom((void*)wz2100icon.pixel_data, wz2100icon.width, wz2100icon.height, wz2100icon.bytes_per_pixel * 8,
+		                                        wz2100icon.width * wz2100icon.bytes_per_pixel, rmask, gmask, bmask, amask), NULL);
+		SDL_WM_SetCaption(pWindowName, NULL);
+	}
+#endif
 
 	/* Initialise the trig stuff */
 	if (!trigInitialise())

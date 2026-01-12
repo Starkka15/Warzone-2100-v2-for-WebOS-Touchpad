@@ -43,6 +43,11 @@ extern void	scroll(void);
 extern void resetScroll(void);
 extern void setMouseScroll(bool);
 
+#ifdef USE_GLES
+/* Touchscreen scroll button control */
+extern void setTouchScroll(BOOL left, BOOL right, BOOL up, BOOL down);
+#endif
+
 extern BOOL DrawnInLastFrame(SDWORD Frame);
 
 // Clear all selections.

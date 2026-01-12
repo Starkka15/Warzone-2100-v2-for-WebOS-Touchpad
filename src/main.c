@@ -353,6 +353,7 @@ char * getModList(void)
 }
 
 
+#if !defined(WZ_WS_WEBOS)
 /*!
  * Retrieves the current working directory and copies it into the provided output buffer
  * \param[out] dest the output buffer to put the current working directory in
@@ -441,6 +442,7 @@ static void getPlatformUserDir(char * const tmpstr, size_t const size)
 		abort();
 	}
 }
+#endif /* !WZ_WS_WEBOS */
 
 
 static void initialize_ConfigDir(void)
@@ -449,6 +451,21 @@ static void initialize_ConfigDir(void)
 
 	if (strlen(configdir) == 0)
 	{
+#if defined(WZ_WS_WEBOS)
+		/* webOS: Use /media/internal/warzone for all data */
+		sstrcpy(tmpstr, "/media/internal/warzone/");
+
+		if (!PHYSFS_setWriteDir(tmpstr))
+		{
+			debug(LOG_FATAL, "Error setting write directory to \"%s\": %s",
+			      tmpstr, PHYSFS_getLastError());
+			exit(1);
+		}
+
+		debug(LOG_WZ, "Write dir: %s", PHYSFS_getWriteDir());
+		debug(LOG_WZ, "Base dir: %s", PHYSFS_getBaseDir());
+		return;
+#else
 		getPlatformUserDir(tmpstr, sizeof(tmpstr));
 
 		if (!PHYSFS_setWriteDir(tmpstr)) // Workaround for PhysFS not creating the writedir as expected.
@@ -475,6 +492,7 @@ static void initialize_ConfigDir(void)
 			tmpstr, PHYSFS_getLastError() );
 			exit(1);
 		}
+#endif /* !WZ_WS_WEBOS */
 	}
 	else
 	{
@@ -570,9 +588,15 @@ static void scanDataDirs( void )
 	if( strlen( datadir ) != 0 )
 		registerSearchPath( datadir, 1 );
 
+#if defined(WZ_WS_WEBOS)
+	// webOS: Use /media/internal/warzone for data
+	registerSearchPath( "/media/internal/warzone/", 2 );
+	rebuildSearchPath( mod_multiplay, true );
+#else
 	// User's home dir
 	registerSearchPath( PHYSFS_getWriteDir(), 2 );
 	rebuildSearchPath( mod_multiplay, true );
+#endif
 
 	if( !PHYSFS_exists("gamedesc.lev") )
 	{
@@ -933,6 +957,9 @@ static void handleActiveEvent(SDL_ActiveEvent * activeEvent)
 		{
 			focusState = FOCUS_IN;
 
+			/* Handle EGL context restoration on webOS */
+			screenHandleFocusChange(true);
+
 			// Don't pause in multiplayer!
 			if (war_GetPauseOnFocusLoss() && !NetPlay.bComms)
 			{
@@ -951,6 +978,9 @@ static void handleActiveEvent(SDL_ActiveEvent * activeEvent)
 		if (focusState != FOCUS_OUT)
 		{
 			focusState = FOCUS_OUT;
+
+			/* Handle EGL context on focus loss for webOS */
+			screenHandleFocusChange(false);
 
 			// Don't pause in multiplayer!
 			if (war_GetPauseOnFocusLoss() && !NetPlay.bComms)

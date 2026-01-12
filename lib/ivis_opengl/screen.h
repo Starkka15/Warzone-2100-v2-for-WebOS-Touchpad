@@ -64,4 +64,10 @@ void screen_enableMapPreview(char *name, int width, int height, Vector2i *player
 void screen_disableMapPreview(void);
 BOOL screen_getMapPreview(void);
 const char *screen_getMapName(void);
+
+/* Swap buffers - wrapper for SDL/EGL */
+void screenSwapBuffers(void);
+
+/* Handle focus changes - used on webOS to manage EGL context */
+void screenHandleFocusChange(BOOL gained);
 #endif

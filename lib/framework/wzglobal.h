@@ -266,7 +266,11 @@
 #  define WZ_WS_QNX
 
 #elif defined(WZ_OS_UNIX)
-#  define WZ_WS_X11
+#  if defined(USE_GLES)
+#    define WZ_WS_WEBOS
+#  else
+#    define WZ_WS_X11
+#  endif
 
 #else
 #  error "Warzone has not been tested on this window system. Please contact warzone-dev@gna.org"

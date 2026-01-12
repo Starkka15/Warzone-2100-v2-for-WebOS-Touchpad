@@ -86,7 +86,8 @@ void initLighting(UDWORD x1, UDWORD y1, UDWORD x2, UDWORD y2)
 	// quick check not trying to go off the map - don't need to check for < 0 since UWORD's!!
 	if (x1 > mapWidth || x2 > mapWidth || y1 > mapHeight || y2 > mapHeight)
 	{
-		ASSERT( false, "initLighting: coords off edge of map" );
+		debug(LOG_WARNING, "initLighting: coords off edge of map (%u,%u)-(%u,%u) map:(%u,%u)",
+			x1, y1, x2, y2, mapWidth, mapHeight);
 		return;
 	}
 

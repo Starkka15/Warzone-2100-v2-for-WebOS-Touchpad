@@ -368,7 +368,11 @@ if test "x$enable_static" = "xyes" && test "x$use_gles" != "xyes"; then
 fi
 
 system_glee=false
-if test "x$host_os_mingw32" != "xyes" && test "x$use_gles" != "xyes"; then
+if test "x$use_gles" = "xyes"; then
+	# For GLES builds, we use our own compatibility layer instead of GLee
+	system_glee=true
+	AC_SUBST([GLee_CFLAGS], ['-I$(top_srcdir)/lib/ivis_opengl'])
+elif test "x$host_os_mingw32" != "xyes"; then
 	PKG_CHECK_MODULES([GLee], [glee >= 5.4.0], [system_glee=true], [system_glee=false])
 	if test "x$system_glee" = "xfalse" ; then
 		AX_EXT_HAVE_HEADER([GLee.h], [/usr/local/include/GL /usr/include/GL])
@@ -442,7 +446,8 @@ AC_CHECK_LIB(physfs, PHYSFS_init, AC_SUBST([PHYSFS_LIBS], [-lphysfs]), AC_MSG_ER
 # Look for OpenGL or OpenGL ES
 if test "x$use_gles" = "xyes"; then
 	AC_MSG_NOTICE([Building for OpenGL ES - skipping desktop OpenGL checks])
-	OPENGL_LIBS="-lGLES_CM"
+	# Link GLES_CM and PDL for webOS integration (PDL needed for compositor support)
+	OPENGL_LIBS="-lGLES_CM -lpdl"
 	AC_SUBST([OPENGL_LIBS], [${OPENGL_LIBS}])
 else
 	CPPFLAGS_SAVE="$CPPFLAGS"

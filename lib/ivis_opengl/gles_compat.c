@@ -113,9 +113,10 @@ void glesEnd(void)
 
 void glesVertex2f(GLfloat x, GLfloat y)
 {
+    int i;
     if (g_imm.count >= GLES_MAX_VERTICES) return;
 
-    int i = g_imm.count;
+    i = g_imm.count;
     g_imm.position[i * 3 + 0] = x;
     g_imm.position[i * 3 + 1] = y;
     g_imm.position[i * 3 + 2] = 0.0f;
@@ -145,9 +146,10 @@ void glesVertex2i(GLint x, GLint y)
 
 void glesVertex3f(GLfloat x, GLfloat y, GLfloat z)
 {
+    int i;
     if (g_imm.count >= GLES_MAX_VERTICES) return;
 
-    int i = g_imm.count;
+    i = g_imm.count;
     g_imm.position[i * 3 + 0] = x;
     g_imm.position[i * 3 + 1] = y;
     g_imm.position[i * 3 + 2] = z;
@@ -246,11 +248,14 @@ void glesNormal3fv(const GLfloat *v)
 
 void glesPushAttrib(GLbitfield mask)
 {
+    GLESAttribState *state;
+    (void)mask; /* unused for now */
+
     if (g_attribStackDepth >= GLES_ATTRIB_STACK_DEPTH) {
         return; /* Stack overflow - silently ignore */
     }
 
-    GLESAttribState *state = &g_attribStack[g_attribStackDepth];
+    state = &g_attribStack[g_attribStackDepth];
 
     /* Query current state */
     glGetBooleanv(GL_DEPTH_WRITEMASK, &state->depthMask);
@@ -265,12 +270,14 @@ void glesPushAttrib(GLbitfield mask)
 
 void glesPopAttrib(void)
 {
+    GLESAttribState *state;
+
     if (g_attribStackDepth <= 0) {
         return; /* Stack underflow - silently ignore */
     }
 
     g_attribStackDepth--;
-    GLESAttribState *state = &g_attribStack[g_attribStackDepth];
+    state = &g_attribStack[g_attribStackDepth];
 
     /* Restore state */
     glDepthMask(state->depthMask);
@@ -313,8 +320,11 @@ const char* glesErrorString(GLenum error)
 void glesBuild2DMipmaps(GLenum target, GLint internalformat, GLsizei width,
                         GLsizei height, GLenum format, GLenum type, const void *data)
 {
-    /* GLES 1.1 can auto-generate mipmaps via GL_GENERATE_MIPMAP parameter */
-    glTexParameteri(target, GL_GENERATE_MIPMAP, GL_TRUE);
+    /*
+     * GLES 1.1: Just upload the base texture level.
+     * We use GL_LINEAR filtering instead of mipmaps for simplicity and reliability.
+     * GL_GENERATE_MIPMAP can be unreliable on some GLES implementations.
+     */
     glTexImage2D(target, 0, internalformat, width, height, 0, format, type, data);
 }
 

@@ -51,6 +51,16 @@
 #define IDRET_COMMAND			9		// command droid button
 #define IDRET_TRANSPORTER		10		// transporter button
 #define IDRET_ORDER				11		// droid order button
+#define IDMENU_BUTTON			12		// menu button (for touchscreen devices)
+
+/* Touchscreen scroll and zoom buttons */
+#define IDSCROLL_LEFT			13		// scroll left button
+#define IDSCROLL_RIGHT			14		// scroll right button
+#define IDSCROLL_UP				15		// scroll up button
+#define IDSCROLL_DOWN			16		// scroll down button
+#define IDZOOM_IN				17		// zoom in button
+#define IDZOOM_OUT				18		// zoom out button
+
 #define IDPOW_POWERBAR_T		102		// power bar - trough
 #define	IDTRANTIMER_BUTTON		11012	//transporter button on timer display
 

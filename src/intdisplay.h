@@ -203,6 +203,10 @@ void intDisplayButtonPressed(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, P
 
 void intDisplayReticuleButton(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, PIELIGHT *pColours);
 
+#ifdef USE_GLES
+void intDisplayTouchButton(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, PIELIGHT *pColours);
+#endif
+
 void intDisplayTab(WIDGET *psWidget,UDWORD TabType, UDWORD Position,
 					UDWORD Number,BOOL Selected,BOOL Hilight,UDWORD x,UDWORD y,UDWORD Width,UDWORD Height);
 void intDisplaySlider(WIDGET *psWidget, UDWORD xOffset, UDWORD yOffset, PIELIGHT *pColours);

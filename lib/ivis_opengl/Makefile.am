@@ -26,6 +26,10 @@ libivis_opengl_a_SOURCES += GLee.c
 noinst_HEADERS += GLee.h
 endif
 
+# GLES compatibility layer
+libivis_opengl_a_SOURCES += gles_compat.c
+noinst_HEADERS += gles_compat.h
+
 # HACK Don't give make errors when switching between trunk and branches.
 # Works by finding the .deps/*.Po files which refer to source files that don't exist, and replacing them with a single dependency on the correct source file.
 # Now with PD-ksh support.

@@ -31,6 +31,6 @@ extern int message_lex(void);
 extern int message_get_lineno(void);
 extern char* message_get_text(void);
 
-extern void message_error(const char* msg);
+extern void message_error(void* ppsViewData, const char* msg);
 
 #endif // __INCLUDED_SRC_MESSAGELY_H__

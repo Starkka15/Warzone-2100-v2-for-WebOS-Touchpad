@@ -135,7 +135,7 @@ void glesBuild2DMipmaps(GLenum target, GLint internalformat, GLsizei width,
                         GLsizei height, GLenum format, GLenum type, const void *data);
 
 #define gluErrorString(e)         glesErrorString(e)
-#define gluBuild2DMipmaps(t,i,w,h,f,ty,d) glesBuild2DMipmaps(t,GL_RGBA,w,h,f,ty,d)
+#define gluBuild2DMipmaps(t,i,w,h,f,ty,d) glesBuild2DMipmaps(t,f,w,h,f,ty,d)
 
 void glesScaleImage(GLenum format, GLsizei srcW, GLsizei srcH, GLenum srcType, const void *src,
                     GLsizei dstW, GLsizei dstH, GLenum dstType, void *dst);
@@ -190,6 +190,56 @@ void glesScaleImage(GLenum format, GLsizei srcW, GLsizei srcH, GLenum srcType, c
 #endif
 #define glActiveStencilFaceEXT(face) ((void)0)
 #define glStencilOpSeparateATI(face, sfail, dpfail, dppass) ((void)0)
+
+/* glFogi doesn't exist in GLES 1.1, use float version */
+#define glFogi(pname, param) glFogf(pname, (GLfloat)(param))
+
+/* Anisotropic filtering not available in GLES 1.1 */
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
+
+/* GLSL not available in GLES 1.1 */
+#ifndef GL_SHADING_LANGUAGE_VERSION
+#define GL_SHADING_LANGUAGE_VERSION 0x8B8C
+#endif
+
+/* Additional GLee extension stubs */
+#define GLEE_EXT_framebuffer_object 0
+#define GLEE_ARB_vertex_buffer_object 0
+
+/* Accumulation buffer not available in GLES */
+#ifndef GL_ACCUM_BUFFER_BIT
+#define GL_ACCUM_BUFFER_BIT 0x00000200
+#endif
+
+/* Polygon modes not in GLES */
+#ifndef GL_LINE
+#define GL_LINE 0x1B01
+#endif
+#ifndef GL_FILL
+#define GL_FILL 0x1B02
+#endif
+#define glPolygonMode(face, mode) ((void)0)
+
+/* glGetDoublev not in GLES - use float version */
+#define glGetDoublev(pname, params) do { \
+    GLfloat _f[16]; \
+    glGetFloatv(pname, _f); \
+    for(int _i=0; _i<16; _i++) ((GLdouble*)(params))[_i] = _f[_i]; \
+} while(0)
+
+/* Texture mipmap level controls not in GLES 1.1 - stub out */
+#ifndef GL_TEXTURE_BASE_LEVEL
+#define GL_TEXTURE_BASE_LEVEL 0x813C
+#endif
+#ifndef GL_TEXTURE_MAX_LEVEL
+#define GL_TEXTURE_MAX_LEVEL 0x813D
+#endif
+/* glTexParameteri with these params will just be ignored for now */
 
 #endif /* USE_GLES */
 

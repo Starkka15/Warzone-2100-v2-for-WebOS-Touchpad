@@ -111,6 +111,12 @@ void pie_UpdateFogDistance(float begin, float end)
 
 void pie_SetFogStatus(BOOL val)
 {
+#ifdef USE_GLES
+	/* Disable fog completely on GLES for testing */
+	(void)val;
+	rendStates.fog = false;
+	return;
+#else
 	float fog_colour[4];
 
 	if (rendStates.fogEnabled)
@@ -145,6 +151,7 @@ void pie_SetFogStatus(BOOL val)
 			rendStates.fog = false;
 		}
 	}
+#endif /* USE_GLES */
 }
 
 /** Selects a texture page and binds it for the current texture unit
@@ -166,7 +173,9 @@ void pie_SetTexturePage(SDWORD num)
 				glEnable(GL_TEXTURE_2D);
 				break;
 			default:
-				if (rendStates.texPage == TEXPAGE_NONE || rendStates.texPage == TEXPAGE_FONT)
+				/* Enable texturing if coming from non-textured or invalid state */
+				if (rendStates.texPage == TEXPAGE_NONE || rendStates.texPage == TEXPAGE_FONT
+				    || rendStates.texPage < 0)
 				{
 					glEnable(GL_TEXTURE_2D);
 				}

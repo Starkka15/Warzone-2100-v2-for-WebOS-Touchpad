@@ -29,6 +29,10 @@
 #include "lib/exceptionhandler/dumpinfo.h"
 
 #include <SDL.h>
+#include <SDL_syswm.h>
+#ifdef USE_GLES
+#include <PDL.h>
+#endif
 #include <physfs.h>
 #include <png.h>
 #include "lib/ivis_common/png_util.h"
@@ -60,6 +64,16 @@ UDWORD		screenDepth = 0;
 int wz_texture_compression;
 
 static SDL_Surface	*screen = NULL;
+
+#ifdef USE_GLES
+/*
+ * webOS PDL integration.
+ * PDL_Init() must be called before SDL_SetVideoMode to properly integrate
+ * with the webOS compositor. SDL then handles EGL internally.
+ */
+static BOOL pdlInitialized = false;
+#endif
+
 static BOOL		bBackDrop = false;
 static char		screendump_filename[PATH_MAX];
 static BOOL		screendump_required = false;
@@ -106,6 +120,24 @@ bool screenInitialise(
 	}
 
 	// The flags to pass to SDL_SetVideoMode.
+#if defined(USE_GLES)
+	/*
+	 * webOS/GLES: Initialize PDL before SDL_SetVideoMode for proper
+	 * compositor integration. This is the official HP PDK approach.
+	 */
+	if (!pdlInitialized) {
+		if (PDL_Init(0) != PDL_NOERROR) {
+			debug(LOG_ERROR, "PDL_Init failed: %s", PDL_GetError());
+			return false;
+		}
+		pdlInitialized = true;
+		debug(LOG_3D, "PDL initialized successfully");
+	}
+
+	/* Use SDL_OPENGL (not SDL_OPENGLES) - SDL handles EGL internally with PDL */
+	video_flags = SDL_OPENGL | SDL_FULLSCREEN;
+	(void)fullScreen; // Always fullscreen on webOS
+#else
 	video_flags  = SDL_OPENGL;    // Enable OpenGL in SDL.
 	video_flags |= SDL_ANYFORMAT; // Don't emulate requested BPP if not available.
 	video_flags |= SDL_HWPALETTE; // Store the palette in hardware.
@@ -130,7 +162,29 @@ bool screenInitialise(
 	{
 		video_flags |= SDL_FULLSCREEN;
 	}
+#endif
 
+#if defined(USE_GLES)
+	/* webOS/GLES: Set OpenGL ES 1.1 context version */
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
+
+	/* Set GL attributes for 16-bit color (RGB565) */
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 6);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+	/* Force TouchPad resolution */
+	width = 1024;
+	height = 768;
+	bpp = 0;  /* Let SDL pick */
+	screenWidth = 1024;
+	screenHeight = 768;
+	pie_SetVideoBufferWidth(width);
+	pie_SetVideoBufferHeight(height);
+	(void)vsync;
+#else
 	// Set the double buffer OpenGL attribute.
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
@@ -172,6 +226,7 @@ bool screenInitialise(
 			exit(1);
 			break;
 	}
+#endif
 
 	screen = SDL_SetVideoMode(width, height, bpp, video_flags);
 	if (!screen)
@@ -179,6 +234,7 @@ bool screenInitialise(
 		debug(LOG_ERROR, "SDL_SetVideoMode failed (%s).", SDL_GetError());
 		return false;
 	}
+#if !defined(USE_GLES)
 	if (SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER, &value) == -1)
 	{
 		debug(LOG_FATAL, "OpenGL initialization did not give double buffering!");
@@ -186,6 +242,11 @@ bool screenInitialise(
 		exit(1);
 	}
 	// Note that no initialisation of GLee is required, since this is handled automatically.
+#else
+	(void)value; /* unused on GLES */
+	/* SDL with PDL handles EGL internally - no manual initialization needed */
+	debug(LOG_3D, "webOS: SDL/PDL handling EGL context");
+#endif
 
 	{
 		char buf[256];
@@ -197,11 +258,13 @@ bool screenInitialise(
 		addDumpInfo(buf);
 		ssprintf(buf, "OpenGL Version : %s", glGetString(GL_VERSION));
 		addDumpInfo(buf);
+#if !defined(USE_GLES)
 		if (GLEE_VERSION_2_0)
 		{
 			ssprintf(buf, "OpenGL GLSL Version : %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
 			addDumpInfo(buf);
 		}
+#endif
 		ssprintf(buf, "Video Mode %d x %d (%d bpp) (%s)", width, height, bpp, fullScreen ? "fullscreen" : "window");
 		addDumpInfo(buf);
 		/* Dump information about OpenGL implementation to the console */
@@ -238,7 +301,8 @@ bool screenInitialise(
 	glOrtho(0, width, height, 0, 1, -1);
 
 	glMatrixMode(GL_TEXTURE);
-	glScalef(1.0f/OLD_TEXTURE_SIZE_FIX, 1.0f/OLD_TEXTURE_SIZE_FIX, 1.0f); // FIXME Scaling texture coords to 256x256!
+	glLoadIdentity();
+	glScalef(1.0f/OLD_TEXTURE_SIZE_FIX, 1.0f/OLD_TEXTURE_SIZE_FIX, 1.0f); // Scaling texture coords to 256x256!
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -246,12 +310,52 @@ bool screenInitialise(
 	glEnable(GL_CULL_FACE);
 
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#if defined(USE_GLES)
+	/* Clear both front and back buffers to avoid initial flickering */
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	SDL_GL_SwapBuffers();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#else
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_ACCUM_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+#endif
 
 	glErrors();
 	return true;
 }
 
+
+/* Swap buffers - wrapper for SDL */
+void screenSwapBuffers(void)
+{
+	SDL_GL_SwapBuffers();
+}
+
+
+/* Handle focus changes - used on webOS to manage GL context */
+void screenHandleFocusChange(BOOL gained)
+{
+#ifdef USE_GLES
+	if (gained) {
+		debug(LOG_3D, "Focus gained - clearing buffers");
+		/*
+		 * When the app regains focus (e.g., returning from card view),
+		 * clear buffers to ensure clean state. SDL/PDL handles context.
+		 */
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		SDL_GL_SwapBuffers();
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	} else {
+		debug(LOG_3D, "Focus lost - finishing pending GL operations");
+		/*
+		 * When losing focus (e.g., going to card view), finish all
+		 * pending GL operations to ensure clean state.
+		 */
+		glFinish();
+	}
+#else
+	(void)gained;
+#endif
+}
 
 /* Release the DD objects */
 void screenShutDown(void)
@@ -259,7 +363,16 @@ void screenShutDown(void)
 	if (screen != NULL)
 	{
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#if defined(USE_GLES)
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		/* Shut down PDL - SDL handles EGL cleanup */
+		if (pdlInitialized) {
+			PDL_Quit();
+			pdlInitialized = false;
+		}
+#else
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_ACCUM_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+#endif
 		glFlush();
 		SDL_FreeSurface(screen);
 		screen = NULL;

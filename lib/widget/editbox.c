@@ -34,6 +34,10 @@
 #include "lib/ivis_common/textdraw.h"
 #include "scrap.h"
 
+#ifdef USE_GLES
+#include <PDL.h>
+#endif
+
 
 /* Pixel gap between edge of edit box and text */
 #define WEDB_XGAP	4
@@ -683,6 +687,18 @@ void editBoxClicked(W_EDITBOX *psWidget, W_CONTEXT *psContext)
 
 			// Cursor should be visible instantly.
 			psWidget->blinkOffset = SDL_GetTicks();
+
+#ifdef USE_GLES
+			/* Show on-screen keyboard for touchscreen devices */
+			{
+				PDL_Err err = PDL_SetKeyboardState(PDL_TRUE);
+				if (err != PDL_NOERROR) {
+					debug(LOG_ERROR, "PDL_SetKeyboardState(TRUE) failed: %s", PDL_GetError());
+				} else {
+					debug(LOG_INPUT, "On-screen keyboard shown");
+				}
+			}
+#endif
 		}
 	}
 }
@@ -698,6 +714,18 @@ void editBoxFocusLost(W_SCREEN* psScreen, W_EDITBOX *psWidget)
 	psWidget->state = WEDBS_FIXED;
 	psWidget->printStart = 0;
 	fitStringStart(psWidget->aText,psWidget->width, &psWidget->printChars, &psWidget->printWidth);
+
+#ifdef USE_GLES
+	/* Hide on-screen keyboard */
+	{
+		PDL_Err err = PDL_SetKeyboardState(PDL_FALSE);
+		if (err != PDL_NOERROR) {
+			debug(LOG_ERROR, "PDL_SetKeyboardState(FALSE) failed: %s", PDL_GetError());
+		} else {
+			debug(LOG_INPUT, "On-screen keyboard hidden");
+		}
+	}
+#endif
 
 	widgSetReturn(psScreen, (WIDGET *)psWidget);
 

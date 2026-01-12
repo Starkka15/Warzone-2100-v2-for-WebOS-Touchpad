@@ -46,6 +46,10 @@ typedef uint32_t scrap_type;
 /* * */
 typedef uint32_t scrap_type;	/* FIXME */
 
+#elif defined(WZ_WS_WEBOS)
+/* webOS - clipboard not available, use stub type */
+typedef uint32_t scrap_type;
+
 #endif /* scrap type */
 
 /* System dependent variables */
@@ -68,6 +72,7 @@ static unsigned short InputGroup;
 
 #define FORMAT_PREFIX	"SDL_scrap_0x"
 
+#if !defined(WZ_WS_WEBOS) && !defined(WZ_WS_MAC)
 static scrap_type
 convert_format(int type)
 {
@@ -102,11 +107,6 @@ switch (type)
 #elif defined(WZ_WS_WIN)
 /* * */
 		return RegisterClipboardFormatA(format);
-
-#elif defined(WZ_WS_MAC)
-/* * */
-		// Meaningless value to prevent "control reaches end of non-void function" warning
-		return 0;
 
 #endif /* scrap type */
 	}
@@ -192,6 +192,7 @@ convert_data(int type, char *dst, char *src, int srclen)
 	}
 	return(dstlen);
 }
+#endif /* !WZ_WS_WEBOS && !WZ_WS_MAC */
 
 /* Convert scrap data to internal format */
 #if (defined(WZ_WS_X11) || defined(WZ_WS_WIN) || defined(WZ_WS_QNX))
@@ -312,6 +313,11 @@ if ( SDL_GetWMInfo(&info) )
 	InputGroup=PhInputGroup(NULL);
 	retval = 0;
 
+#elif defined(WZ_WS_WEBOS) || defined(WZ_WS_MAC)
+/* webOS/Mac - clipboard not supported, but don't fail */
+	(void)info;
+	retval = 0;
+
 #endif /* scrap type */
 	}
 return(retval);
@@ -336,6 +342,12 @@ int lost_scrap(void)
 void
 put_scrap(int type, int srclen, char *src)
 {
+#if defined(WZ_WS_WEBOS) || defined(WZ_WS_MAC)
+	/* webOS/Mac - clipboard not supported, ignore */
+	(void)type;
+	(void)srclen;
+	(void)src;
+#else
 	scrap_type format;
 	int dstlen;
 #if (defined(WZ_WS_X11) || defined(WZ_WS_WIN) || defined(WZ_WS_QNX))
@@ -432,11 +444,18 @@ if ( OpenClipboard(SDL_Window) )
 }
 #endif
 #endif /* scrap type */
+#endif /* WZ_WS_WEBOS || WZ_WS_MAC */
 }
 
 void
 get_scrap(int type, int *dstlen, char **dst)
 {
+#if defined(WZ_WS_WEBOS) || defined(WZ_WS_MAC)
+	/* webOS/Mac - clipboard not supported */
+	(void)type;
+	*dstlen = 0;
+	*dst = NULL;
+#else
 	scrap_type format;
 
 	*dstlen = 0;
@@ -584,6 +603,7 @@ get_scrap(int type, int *dstlen, char **dst)
 }
 #endif
 #endif /* scrap type */
+#endif /* WZ_WS_WEBOS || WZ_WS_MAC */
 }
 
 #if defined(WZ_WS_X11)
