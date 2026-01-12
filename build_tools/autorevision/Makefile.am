@@ -8,8 +8,13 @@ noinst_PROGRAMS = autorevision
 autorevision_SOURCES = autorevision.cpp
 
 # Add Autorevision header to source directory
+# Skip if cross-compiling (autorevision.h should be pre-created)
 all-local: $(builddir)/autorevision$(EXEEXT)
-	$(builddir)/autorevision$(EXEEXT) +cstr -v $(top_srcdir) $(top_builddir)/src/autorevision.h
+	@if [ -f $(top_builddir)/src/autorevision.h ]; then \
+		echo "autorevision.h already exists, skipping generation"; \
+	else \
+		$(builddir)/autorevision$(EXEEXT) +cstr -v $(top_srcdir) $(top_builddir)/src/autorevision.h; \
+	fi
 
 # Remove Autorevision header from source directory
 clean-local:

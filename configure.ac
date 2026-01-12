@@ -346,7 +346,20 @@ AS_IF([test "x$enable_sound" = "xyes"],[
 	PKG_CHECK_MODULES([OGGVORBIS], [vorbisfile >= 1.1])
 ])
 
-if test "x$enable_static" = "xyes" ; then
+# Check if building for GLES (USE_GLES defined in CFLAGS/CXXFLAGS)
+AC_MSG_CHECKING([for OpenGL ES build])
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+#ifdef USE_GLES
+int gles_build = 1;
+#else
+#error Not a GLES build
+#endif
+]])],
+[use_gles=yes],
+[use_gles=no])
+AC_MSG_RESULT([$use_gles])
+
+if test "x$enable_static" = "xyes" && test "x$use_gles" != "xyes"; then
 	# If linking statically, make sure to include the direct dependencies of
 	# QuesoGLC as well, because it does not have a pkg-config file.
 	# FIXME Remove this whenever QuesoGLC has a pkg-config file
@@ -355,7 +368,7 @@ if test "x$enable_static" = "xyes" ; then
 fi
 
 system_glee=false
-if test "x$host_os_mingw32" != "xyes" ; then
+if test "x$host_os_mingw32" != "xyes" && test "x$use_gles" != "xyes"; then
 	PKG_CHECK_MODULES([GLee], [glee >= 5.4.0], [system_glee=true], [system_glee=false])
 	if test "x$system_glee" = "xfalse" ; then
 		AX_EXT_HAVE_HEADER([GLee.h], [/usr/local/include/GL /usr/include/GL])
@@ -391,16 +404,18 @@ if test "x$host_os_mingw32" = "xyes" ; then
     WIN32_LIBS="${WIN32_LIBS} ${IBERTY_LIBS}"
 fi
 
-# Look for X11 if required
+# Look for X11 if required (optional for embedded systems like webOS)
 AC_TRY_COMPILE(, [
 #if   (defined(__OS2__) && !defined(__EMX__))
 # error Running OS2, not a Unix system.
 #elif (!defined(SAG_COM) && (defined(WIN32) || defined(WIN64) || defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__WIN64__) || defined(__NT__))) || (defined(__MWERKS__) && defined(__INTEL__))
 # error Running on Windows, not a Unix system.
+#elif defined(USE_GLES)
+# error Building for GLES, X11 not required.
 #endif
 ],[
 	AC_CHECK_LIB(X11, XSetSelectionOwner, AC_SUBST([X11_LIBS], [-lX11]),
-		AC_MSG_ERROR([X11 library not found]))
+		AC_MSG_WARN([X11 library not found - clipboard support disabled]))
 ])
 
 # Look for Motif
@@ -424,40 +439,52 @@ AC_CHECK_LIB(popt, poptGetContext, AC_SUBST([POPT_LIBS], [-lpopt]), AC_MSG_ERROR
 AC_CHECK_HEADER(physfs.h, , AC_MSG_ERROR([PhysicsFS header not found.]))
 AC_CHECK_LIB(physfs, PHYSFS_init, AC_SUBST([PHYSFS_LIBS], [-lphysfs]), AC_MSG_ERROR([PhysicsFS not found.]), [${WIN32_LIBS}])
 
-# Look for OpenGL
-CPPFLAGS_SAVE="$CPPFLAGS"
-CPPFLAGS="$CPPFLAGS $SDL_CFLAGS"
-AC_CHECK_HEADER([SDL_opengl.h], [],
-	AC_MSG_ERROR([SDL OpenGL header not found. Please install SDL with OpenGL support.]))
-CPPFLAGS="$CPPFLAGS_SAVE"
+# Look for OpenGL or OpenGL ES
+if test "x$use_gles" = "xyes"; then
+	AC_MSG_NOTICE([Building for OpenGL ES - skipping desktop OpenGL checks])
+	OPENGL_LIBS="-lGLES_CM"
+	AC_SUBST([OPENGL_LIBS], [${OPENGL_LIBS}])
+else
+	CPPFLAGS_SAVE="$CPPFLAGS"
+	CPPFLAGS="$CPPFLAGS $SDL_CFLAGS"
+	AC_CHECK_HEADER([SDL_opengl.h], [],
+		AC_MSG_ERROR([SDL OpenGL header not found. Please install SDL with OpenGL support.]))
+	CPPFLAGS="$CPPFLAGS_SAVE"
 
-AC_CHECK_LIB(GL, main,
-	OPENGL_LIBS="-lGL",
-	AC_CHECK_LIB(opengl32, main,
-		OPENGL_LIBS="-lopengl32",
-		AC_MSG_ERROR([OpenGL library not found.])))
-AC_CHECK_LIB(GLU, main,
-	OPENGL_LIBS="${OPENGL_LIBS} -lGLU",
-	AC_CHECK_LIB(glu32, main,
-		OPENGL_LIBS="${OPENGL_LIBS} -lglu32",
-		AC_MSG_ERROR([GLU library not found.]),
-		[${OPENGL_LIBS} -lm]), [${OPENGL_LIBS} -lm])
-AC_SUBST([OPENGL_LIBS], [${OPENGL_LIBS}])
-
-# Look for OpenGLC
-AC_CHECK_HEADER(GL/glc.h, ,
-	AC_MSG_ERROR([OpenGLC header not found. Please install QuesoGLC: http://quesoglc.sourceforge.net/]))
-AC_CHECK_LIB(GLC, main,
-	OPENGLC_LIBS="-lGLC",
-	AC_CHECK_LIB(glc32, main,
-		OPENGLC_LIBS="-lglc32",
-		AC_MSG_ERROR([OpenGLC library not found. Please install QuesoGLC: http://quesoglc.sourceforge.net/])))
-if test "x$enable_static" = "xyes" ; then
-	# If linking statically, make sure to link against the direct dependencies, too.
-	# FIXME Remove this whenever QuesoGLC has a pkg-config file
-	OPENGLC_LIBS="${OPENGLC_LIBS} ${FONTCONFIG_LIBS} ${FREETYPE_LIBS}"
+	AC_CHECK_LIB(GL, main,
+		OPENGL_LIBS="-lGL",
+		AC_CHECK_LIB(opengl32, main,
+			OPENGL_LIBS="-lopengl32",
+			AC_MSG_ERROR([OpenGL library not found.])))
+	AC_CHECK_LIB(GLU, main,
+		OPENGL_LIBS="${OPENGL_LIBS} -lGLU",
+		AC_CHECK_LIB(glu32, main,
+			OPENGL_LIBS="${OPENGL_LIBS} -lglu32",
+			AC_MSG_ERROR([GLU library not found.]),
+			[${OPENGL_LIBS} -lm]), [${OPENGL_LIBS} -lm])
+	AC_SUBST([OPENGL_LIBS], [${OPENGL_LIBS}])
 fi
-AC_SUBST([OPENGLC_LIBS], [${OPENGLC_LIBS}])
+
+# Look for OpenGLC (not needed for GLES - text rendering uses stubs)
+if test "x$use_gles" = "xyes"; then
+	AC_MSG_NOTICE([Building for OpenGL ES - skipping QuesoGLC (text rendering stubbed)])
+	OPENGLC_LIBS=""
+	AC_SUBST([OPENGLC_LIBS], [${OPENGLC_LIBS}])
+else
+	AC_CHECK_HEADER(GL/glc.h, ,
+		AC_MSG_ERROR([OpenGLC header not found. Please install QuesoGLC: http://quesoglc.sourceforge.net/]))
+	AC_CHECK_LIB(GLC, main,
+		OPENGLC_LIBS="-lGLC",
+		AC_CHECK_LIB(glc32, main,
+			OPENGLC_LIBS="-lglc32",
+			AC_MSG_ERROR([OpenGLC library not found. Please install QuesoGLC: http://quesoglc.sourceforge.net/])))
+	if test "x$enable_static" = "xyes" ; then
+		# If linking statically, make sure to link against the direct dependencies, too.
+		# FIXME Remove this whenever QuesoGLC has a pkg-config file
+		OPENGLC_LIBS="${OPENGLC_LIBS} ${FONTCONFIG_LIBS} ${FREETYPE_LIBS}"
+	fi
+	AC_SUBST([OPENGLC_LIBS], [${OPENGLC_LIBS}])
+fi
 
 # When (cross-)compiling for Windows (MinGW) we need to link in BFD for the Dr.
 # MinGW derived exception handler.
