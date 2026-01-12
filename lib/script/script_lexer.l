@@ -852,8 +852,11 @@ int scr_wrap(void)
 
 /* Older GNU Flex versions don't define yylex_destroy()
  * (and neither define a subminor version)
+ * Flex 2.6.x and later always generate this function.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - lex_destroy is generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 int scr_lex_destroy(void)
 {
 	/* For non-reentrant C scanner only. */

@@ -55,8 +55,11 @@ static UDWORD currText=0;
 /* Older GNU Flex versions don't define yyget_extra(), yyset_extra(),
  * yyget_text() and yyget_lineno().
  * (and neither define a subminor version)
+ * Flex 2.6.x+ generates these accessor functions automatically.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - accessor functions are generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 # define yyget_extra  scrv_get_extra
 # define yyset_extra  scrv_set_extra
 # define yyget_lineno scrv_get_lineno
@@ -194,8 +197,11 @@ YY_EXTRA_TYPE yyget_extra()
 
 /* Older GNU Flex versions don't define yylex_destroy()
  * (and neither define a subminor version)
+ * Flex 2.6.x+ generates yylex_destroy() automatically.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - lex_destroy is generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 int scrv_lex_destroy(void)
 {
 	/* For non-reentrant C scanner only. */

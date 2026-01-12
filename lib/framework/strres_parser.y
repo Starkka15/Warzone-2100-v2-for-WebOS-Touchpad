@@ -31,19 +31,19 @@ extern int strres_lex(void);
 extern int strres_get_lineno(void);
 extern char* strres_get_text(void);
 
-void yyerror(const char* msg)
+void yyerror(void* psStrRes, const char* msg)
 {
+	(void)psStrRes; // unused
 	debug(LOG_ERROR, "STRRES file parse error:\n%s at line %d\nText: '%s'", msg, strres_get_lineno(), strres_get_text());
 }
 
 // Forward declaration to allow pointers to this type
 struct STR_RES;
 
-#define YYPARSE_PARAM psStrRes
-
 %}
 
-%name-prefix="strres_"
+%define api.prefix {strres_}
+%parse-param { void* psStrRes }
 
 %union {
 	char  *sval;

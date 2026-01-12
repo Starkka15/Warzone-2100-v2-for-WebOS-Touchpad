@@ -50,8 +50,11 @@ static char aText[YYLMAX];
 /* Older GNU Flex versions don't define yyget_extra(), yyset_extra(),
  * yyget_text() and yyget_lineno().
  * (and neither define a subminor version)
+ * Flex 2.6.x and later always generate these functions.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - accessor functions are generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 # define yyget_extra  lev_get_extra
 # define yyset_extra  lev_set_extra
 # define yyget_lineno lev_get_lineno
@@ -167,8 +170,11 @@ YY_EXTRA_TYPE yyget_extra()
 
 /* Older GNU Flex versions don't define yylex_destroy()
  * (and neither define a subminor version)
+ * Flex 2.6.x and later always generate this function.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - lex_destroy is generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 int lev_lex_destroy(void)
 {
 	/* For non-reentrant C scanner only. */

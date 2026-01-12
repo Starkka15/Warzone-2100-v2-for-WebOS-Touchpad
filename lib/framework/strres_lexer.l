@@ -49,8 +49,11 @@ static inline bool no_warn_unused_result(int ignore) { if (ignore) {} return tru
 /* Older GNU Flex versions don't define yyget_extra(), yyset_extra(),
  * yyget_text() and yyget_lineno().
  * (and neither define a subminor version)
+ * Flex 2.6.x and later always generate these functions.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - accessor functions are generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 # define yyget_extra  strres_get_extra
 # define yyset_extra  strres_set_extra
 # define yyget_lineno strres_get_lineno
@@ -102,7 +105,7 @@ extern void strres_set_debug(int bdebug);
 	/* Match quoted text */
 \"							{ BEGIN QUOTE; }
 <QUOTE>\"					{ BEGIN 0; }
-<QUOTE>\n					{ strres_error("Unexpected end of line in string"); }
+<QUOTE>\n					{ strres_error(NULL, "Unexpected end of line in string"); }
 <QUOTE>[^\"\n]*				{
 								strres_lval.sval = strdup(yytext);
 								return QTEXT_T;
@@ -142,8 +145,11 @@ YY_EXTRA_TYPE yyget_extra()
 
 /* Older GNU Flex versions don't define yylex_destroy()
  * (and neither define a subminor version)
+ * Flex 2.6.x and later always generate this function.
  */
-#if !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
+#if defined(YY_FLEX_MINOR_VERSION) && YY_FLEX_MINOR_VERSION >= 6
+/* Flex 2.6.x+ - lex_destroy is generated automatically */
+#elif !defined(YY_FLEX_SUBMINOR_VERSION) || (YY_FLEX_SUBMINOR_VERSION < 9)
 int strres_lex_destroy(void)
 {
 	/* For non-reentrant C scanner only. */

@@ -46,7 +46,7 @@ void yyerror(const char* msg)
 
 %}
 
-%name-prefix="res_"
+%define api.prefix {res_}
 
 %union {
 	char  *sval;
