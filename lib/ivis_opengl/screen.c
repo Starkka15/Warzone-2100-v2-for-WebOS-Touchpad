@@ -24,7 +24,7 @@
  *
  */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include "lib/framework/frame.h"
 #include "lib/exceptionhandler/dumpinfo.h"
 
@@ -40,10 +40,12 @@
 #include "lib/ivis_common/pieblitfunc.h"
 #include "lib/ivis_common/pieclip.h"
 
+#ifndef USE_GLES
 #if defined(WZ_OS_MAC)
 #include <OpenGL/glu.h>
 #else
 #include <GL/glu.h>
+#endif
 #endif
 #include "screen.h"
 #include "src/console.h"

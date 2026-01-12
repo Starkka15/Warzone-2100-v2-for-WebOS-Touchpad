@@ -25,7 +25,7 @@
  * along with connection and game options.
  */
 
-#include <GLee.h>
+#include "lib/ivis_opengl/gl_compat.h"
 #include "lib/framework/frame.h"
 
 #include <time.h>
@@ -95,10 +95,12 @@
 #include "init.h"
 #include "levels.h"
 
+#ifndef USE_GLES
 #if defined(WZ_OS_MAC)
 #include <QuesoGLC/glc.h>
 #else
 #include <GL/glc.h>
+#endif
 #endif
 
 #define MAP_PREVIEW_DISPLAY_TIME 2500	// number of milliseconds to show map in preview

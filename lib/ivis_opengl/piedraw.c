@@ -21,7 +21,7 @@
  *  Render routines for 3D coloured and shaded transparency rendering.
  */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include <string.h>
 #include <SDL_video.h>
 

@@ -21,12 +21,14 @@
  *  Renderer setup and state control routines for 3D rendering.
  */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include "lib/framework/frame.h"
 
 #include <SDL.h>
 #include <SDL_mouse.h>
+#ifndef USE_GLES
 #include <SDL_opengl.h>
+#endif
 
 #include "lib/ivis_common/piestate.h"
 #include "lib/ivis_common/piedef.h"

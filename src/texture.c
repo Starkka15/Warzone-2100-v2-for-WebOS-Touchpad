@@ -23,7 +23,7 @@
  * This is where we do texture atlas generation.
  */
 
-#include <GLee.h>
+#include "lib/ivis_opengl/gl_compat.h"
 #include "lib/framework/frame.h"
 
 
@@ -31,10 +31,12 @@
 
 #include <physfs.h>
 
+#ifndef USE_GLES
 #if defined(WZ_OS_MAC)
 #include <OpenGL/glu.h>
 #else
 #include <GL/glu.h>
+#endif
 #endif
 
 #include "lib/framework/file.h"

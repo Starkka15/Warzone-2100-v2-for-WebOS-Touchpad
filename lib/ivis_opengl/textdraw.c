@@ -18,7 +18,7 @@
 	Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include "lib/framework/frame.h"
 #include <stdlib.h>
 #include <string.h>
@@ -33,10 +33,12 @@
 #include "lib/ivis_common/textdraw.h"
 #include "lib/ivis_common/bitimage.h"
 
+#ifndef USE_GLES
 #ifdef WZ_OS_MAC
 # include <QuesoGLC/glc.h>
 #else
 # include <GL/glc.h>
+#endif
 #endif
 
 static char font_family[128];
@@ -47,15 +49,61 @@ static float font_size = 12.f;
 // Contains the font color in the following order: red, green, blue, alpha
 static float font_colour[4] = {1.f, 1.f, 1.f, 1.f};
 
+#ifndef USE_GLES
 static GLint _glcContext = 0;
 static GLint _glcFont_Regular = 0;
 static GLint _glcFont_Bold = 0;
+#endif
 
 /***************************************************************************/
 /*
  *	Source
  */
 /***************************************************************************/
+
+#ifdef USE_GLES
+/* GLES stub implementations - text rendering not yet supported */
+
+void iV_font(const char *fontName, const char *fontFace, const char *fontFaceBold)
+{
+	if (fontName) sstrcpy(font_family, fontName);
+	if (fontFace) sstrcpy(font_face_regular, fontFace);
+	if (fontFaceBold) sstrcpy(font_face_bold, fontFaceBold);
+}
+
+void iV_TextInit(void) { }
+void iV_TextShutdown(void) { }
+void iV_SetFont(enum iV_fonts FontID)
+{
+	switch (FontID) {
+		case font_regular: font_size = 12.f; break;
+		case font_scaled: font_size = 12.f * pie_GetVideoBufferHeight() / 480.f; break;
+		case font_large: font_size = 21.f; break;
+		case font_small: font_size = 9.f; break;
+	}
+}
+unsigned int iV_GetTextWidth(const char* string) { return string ? strlen(string) * (unsigned int)(font_size * 0.6f) : 0; }
+unsigned int iV_GetCountedTextWidth(const char* string, size_t len) { return len * (unsigned int)(font_size * 0.6f); }
+unsigned int iV_GetTextHeight(const char* string) { return (unsigned int)font_size; }
+unsigned int iV_GetCharWidth(uint32_t charCode) { return (unsigned int)(font_size * 0.6f); }
+int iV_GetTextAboveBase(void) { return (int)(font_size * 0.8f); }
+int iV_GetTextBelowBase(void) { return (int)(font_size * 0.2f); }
+int iV_GetTextLineSize(void) { return (int)(font_size * 1.2f); }
+void iV_SetTextSize(float size) { font_size = size; }
+void iV_SetTextColour(PIELIGHT colour)
+{
+	font_colour[0] = colour.byte.r / 255.f;
+	font_colour[1] = colour.byte.g / 255.f;
+	font_colour[2] = colour.byte.b / 255.f;
+	font_colour[3] = colour.byte.a / 255.f;
+}
+void iV_DrawTextRotated(const char* string, float x, float y, float rotation) { /* No text rendering in GLES yet */ }
+void iV_DrawTextRotatedFv(float x, float y, float rotation, const char* format, va_list ap) { }
+void iV_DrawTextRotatedF(float x, float y, float rotation, const char* format, ...) { }
+void iV_DrawTextF(float x, float y, const char* format, ...) { }
+int iV_DrawFormattedText(const char* String, UDWORD x, UDWORD y, UDWORD Width, UDWORD Justify) { return y; }
+
+#else /* !USE_GLES - Original GLC implementation */
 
 void iV_font(const char *fontName, const char *fontFace, const char *fontFaceBold)
 {
@@ -708,3 +756,5 @@ void iV_SetTextSize(float size)
 {
 	font_size = size;
 }
+
+#endif /* USE_GLES */

@@ -21,7 +21,7 @@
  *  Extended render routines for 3D rendering.
  */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include "lib/framework/frame.h"
 #include "lib/framework/frameint.h"
 

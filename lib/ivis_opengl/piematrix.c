@@ -21,7 +21,7 @@
  *  Matrix manipulation functions.
  */
 
-#include <GLee.h>
+#include "gl_compat.h"
 #include "lib/framework/frame.h"
 
 #include "lib/framework/fixedpoint.h"

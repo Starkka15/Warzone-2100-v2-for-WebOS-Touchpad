@@ -55,7 +55,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <GLee.h>
+#include "lib/ivis_opengl/gl_compat.h"
 #include "lib/framework/frame.h"
 #include "lib/framework/frameint.h"
 #include "sequence.h"
@@ -79,10 +79,12 @@
 # else
 #  include <AL/al.h>
 # endif
+#ifndef USE_GLES
 #if defined(WZ_OS_MAC)
 #include <OpenGL/glu.h>
 #else
 #include <GL/glu.h>
+#endif
 #endif
 // stick this in sequence.h perhaps?
 typedef struct

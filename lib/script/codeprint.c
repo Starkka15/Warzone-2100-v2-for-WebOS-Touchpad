@@ -214,7 +214,7 @@ void cpPrintProgram(SCRIPT_CODE *psProg)
 	}
 
 	ip = psProg->pCode;
-	end = (INTERP_VAL*)((UBYTE*)ip + psProg->size);
+	end = (INTERP_VAL*)(void*)((UBYTE*)ip + psProg->size);
 	triggerCode = (psProg->numTriggers > 0);
 
 	opcode = (ip->v.ival >> OPCODE_SHIFT);
