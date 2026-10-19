@@ -46,6 +46,9 @@ extern void setMouseScroll(bool);
 #ifdef USE_GLES
 /* Touchscreen scroll button control */
 extern void setTouchScroll(BOOL left, BOOL right, BOOL up, BOOL down);
+/* Whether the arrow buttons rotate and pitch the camera instead of scrolling */
+extern BOOL getTouchRotateMode(void);
+extern void setTouchRotateMode(BOOL rotate);
 #endif
 
 extern BOOL DrawnInLastFrame(SDWORD Frame);

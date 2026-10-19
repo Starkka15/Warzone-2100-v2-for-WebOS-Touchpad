@@ -247,3 +247,8 @@ devpkg/*
 
 # profiler stuff
 win32/CodeAnalyst
+
+# webOS build outputs (pkg/webos/build-touchpad.sh, make-ipk.ps1)
+/pkg/webos/warzone2100
+/pkg/webos/warzone2100-*
+/pkg/webos/*_all.ipk

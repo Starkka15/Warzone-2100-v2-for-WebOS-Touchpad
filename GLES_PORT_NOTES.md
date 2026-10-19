@@ -134,8 +134,13 @@ Warzone uses 0-256 texture coordinates throughout. Desktop OpenGL scales these v
 ### 3. GL_QUADS Conversion
 GLES doesn't support GL_QUADS. Converted to triangles: quad vertices 0,1,2,3 become triangles (0,1,2) and (0,2,3).
 
-### 4. No Mipmaps
-GLES 1.1 mipmap generation is unreliable. Using `GL_LINEAR` filtering only.
+### 4. Mipmaps
+Terrain: the tile sets ship in 128, 64, 32 and 16 pixel versions, which load
+as the first four mip levels of the terrain atlas (`newPage` now honours the
+level). GLES 1.1 has no `GL_TEXTURE_MAX_LEVEL`, so `texLoad` builds the
+remaining levels down to 1x1 from the smallest set. Model textures use
+`GL_GENERATE_MIPMAP`. Filtering is `GL_LINEAR_MIPMAP_NEAREST`. Without
+mipmaps, the minified 2048x2048 terrain atlas thrashed the texture cache.
 
 ### 5. No Stencil Shadows
 Shadow volumes require stencil buffer operations not available in GLES 1.1. Shadows disabled.
@@ -210,23 +215,95 @@ Fog disabled for GLES to simplify rendering pipeline during debugging.
 
 ## Build Instructions
 
+Builds run in WSL with the CodeSourcery 2011.03 toolchain and the Palm PDK.
+The 32-bit toolchain cannot read Windows drives, so the scripts mirror the
+tree to an ext4 disk and build there. Paths default to the author's setup and
+can be overridden through environment variables (see each script).
+
 ```bash
-# Set up toolchain
-export PATH="/home/stark/arm-2011.03/bin:$PATH"
+# once: static ogg, vorbis, theora, physfs and popt, optimised for the Cortex-A8
+pkg/webos/build-deps.sh
 
-# Configure (if needed)
-./configure --host=arm-none-linux-gnueabi --enable-gles \
-  --with-sdl-prefix=/home/stark/HPwebOS/PDK \
-  --prefix=/media/internal/warzone
-
-# Build
-make -j4
-
-# Deploy
-scp src/warzone2100 root@<touchpad-ip>:/media/internal/warzone/bin/
+# the game; the stripped binary lands in pkg/webos/warzone2100
+pkg/webos/build-touchpad.sh
 ```
 
+`build-touchpad.sh` configures with `--enable-debug=no` and
+`-O2 -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp`. Warzone's configure
+defaults to a debug build with no optimisation, which is how the first
+releases were built.
+
+Game data (`base.wz`, `mp.wz`) goes in `/media/internal/warzone/`, which is
+also where the config and saves are written.
+
 ---
+
+## Performance (October 2026)
+
+From 11-12 FPS to about 25-35 FPS in a skirmish. Each item below was measured
+on the TouchPad with the profiler described afterwards.
+
+- **Release build.** The previous binaries were `-O0` debug builds with
+  assertions enabled.
+- **Config file read.** The webOS branch of `initialize_ConfigDir` never added
+  the write directory to the search path, so `config` was never read: every
+  start used the defaults and saved them over the file.
+- **Draw call merging** (`gles_compat.c`). The driver spends about 24 us of
+  CPU time and 23 us of GPU time per draw call, however small (measured: 300
+  draws of 6 vertices cost 7 ms to submit, 1 draw of 1800 vertices 0.4 ms).
+  Triangles from `glBegin`/`glEnd` and from models therefore collect in one
+  batch, moved into eye space on the CPU, and draw in one call when GL state
+  really changes. Every state-changing GL call goes through a wrapper that
+  draws the batch first and skips changes that change nothing. About 300 draws
+  a frame became about 80.
+- **Model texture atlas** (`tex.c`). Model pages up to 256x256 share one
+  2048x2048 texture, so moving between a droid's body, propulsion and weapon
+  no longer changes texture and breaks the batch. `pie_SetTexturePage` sets
+  the texture coordinate transform for the page's slot. The skybox (`page-25`)
+  keeps its own texture because it repeats. Two-sided polygons go into the
+  batch twice, once per winding, instead of switching culling off.
+- **Models** go to the batch whole instead of one draw per polygon.
+- **Terrain** (`piedraw.c`): four shared corners per tile in one interleaved
+  16-byte vertex (shorts; texcoords in 1/32768ths through the texture matrix),
+  and indices only for the tiles drawn this frame, in one draw call. This
+  replaced six float vertices per tile, one draw per row and clearing the
+  whole array every frame.
+- **Water** triangles are drawn together (`pie_FlushWater`).
+- **Text** is drawn a string at a time.
+- **Fog of war** (`avUpdateTiles`) visits every map tile each frame; the
+  per-tile uplink, god mode and alliance checks are now done once per frame,
+  and tiles are walked in memory order.
+- **Mouse picking** checks each tile's bounding box before the exact test.
+
+### Touch controls (2.3.1)
+
+`intAddReticule` (hci.c) adds MENU in the top left and one cluster in the
+bottom right: a LEFT CLICK / RIGHT CLICK toggle (the `RightClickOrders`
+setting), a SCROLL / ROTATE toggle (`setTouchRotateMode`, display.c: in rotate
+mode the arrow buttons call `kf_RotateLeft/Right` and `kf_PitchBack/Forward`),
+then the arrows and zoom as 80x80 buttons. The minimap moves to the top right
+(`radarSize`, radar.c). The toggles show the current mode and keep it when the
+reticule is rebuilt.
+
+### Profiling
+
+Run with `WZ_PROFILE=1` in the environment for a line on stderr every 100
+frames: milliseconds per stage (gpu, swap, logic, sky, terrain, effects,
+tdraw, water, objects, hud, ui), draw calls and their time, and why batches
+were drawn. While profiling, the GPU is waited for before each swap so that its
+time shows on its own, which lowers the frame rate somewhat.
+
+For a function-level profile, build with `DEBUG=profile BUILD=<dir>
+OUT=warzone2100-gprof pkg/webos/build-touchpad.sh`, play, quit through the
+menus (gmon.out is written at exit, in the current directory), and run the
+toolchain's `arm-none-linux-gnueabi-gprof` on the unstripped binary.
+
+### What is left
+
+Per frame, roughly: terrain building 4 ms, terrain projection 3 ms, interface
+3.5 ms, effects 2 ms, and a GPU cost of about 8-9 ms that is there even for an
+empty frame. That last one is probably the webOS compositor; 16-bit colour
+(RGB565) is already in use.
 
 ## Next Steps
 

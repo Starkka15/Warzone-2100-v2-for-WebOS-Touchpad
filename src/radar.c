@@ -108,6 +108,10 @@ static void radarSize(int ZoomLevel)
 		radarCenterX = pie_GetVideoBufferWidth() - BASE_GAP * 4 - radarWidth / 2;
 		radarCenterY = pie_GetVideoBufferHeight() - BASE_GAP * 4 - radarHeight / 2;
 	}
+#ifdef USE_GLES
+	// top right: the bottom right holds the touch controls
+	radarCenterY = BASE_GAP * 4 + (rotateRadar ? MAX(radarWidth, radarHeight) : radarHeight) / 2;
+#endif
 	debug(LOG_WZ, "radar=(%u,%u) tex=(%u,%u) size=(%u,%u)", radarCenterX, radarCenterY, radarTexWidth, radarTexHeight, radarWidth, radarHeight);
 }
 

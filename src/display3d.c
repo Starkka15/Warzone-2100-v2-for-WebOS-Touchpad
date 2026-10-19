@@ -23,6 +23,7 @@
  * Originally by Alex McLean & Jeremy Sallis, Pumpkin Studios, EIDOS INTERACTIVE
  */
 #include "lib/framework/frame.h"
+#include "lib/framework/wzprof.h"
 #include "lib/framework/math_ext.h"
 #include "lib/framework/stdio_ext.h"
 
@@ -468,11 +469,14 @@ void draw3DScene( void )
 	pie_SetGeometricOffset((rendSurface.width >> 1), geoOffset);
 
 	// draw sky and fogbox
+	WZPROF_BEGIN(PROF_SKY);
 	renderSurroundings();
+	WZPROF_END(PROF_SKY);
 
 	// draw terrain
 	displayTerrain();
 
+	WZPROF_BEGIN(PROF_HUD);
 	pie_BeginInterface();
 	updateLightLevels();
 	drawDroidSelections();
@@ -496,6 +500,7 @@ void draw3DScene( void )
 		pie_SetFogStatus(false);
 		displayConsoleMessages();
 	}
+	WZPROF_END(PROF_HUD);
 	pie_SetDepthBufferStatus(DEPTH_CMP_ALWAYS_WRT_OFF);
 	pie_SetFogStatus(false);
 	iV_SetTextColour(WZCOL_TEXT_BRIGHT);
@@ -792,6 +797,8 @@ static void drawTiles(iView *player)
 	int i, j;
 	SDWORD rx, rz;
 
+	WZPROF_BEGIN(PROF_TERRAIN);
+
 	// Animate the water texture, just cycles the V coordinate through half the tiles height.
 	if(!gamePaused())
 	{
@@ -948,10 +955,14 @@ static void drawTiles(iView *player)
 		}
 	}
 
+	WZPROF_END(PROF_TERRAIN);
+	WZPROF_BEGIN(PROF_EFFECTS);
 	/* This is done here as effects can light the terrain - pause mode problems though */
 	processEffects();
 	atmosUpdateSystem();
 	avUpdateTiles();
+	WZPROF_END(PROF_EFFECTS);
+	WZPROF_BEGIN(PROF_TDRAW);
 
 	// Draw all the normal tiles
 	pie_SetAlphaTest(false);
@@ -980,6 +991,8 @@ static void drawTiles(iView *player)
 	                MAX(0,-playerXTile-1),
 	                MIN(visibleTiles.y, mapHeight-playerZTile),
 	                MIN(visibleTiles.x, mapWidth-playerXTile));
+	WZPROF_END(PROF_TDRAW);
+	WZPROF_BEGIN(PROF_WATER);
 
 	// Update height for water
 	for (i = 0; i < visibleTiles.y + 1; i++)
@@ -1033,6 +1046,7 @@ static void drawTiles(iView *player)
 			}
 		}
 	}
+	pie_FlushWater();
 
 	// Now draw the water tiles in a second pass to get alpha sort order correct
 	pie_TranslateTextureBegin(Vector2f_Init(0.0f, waterRealValue));
@@ -1067,16 +1081,19 @@ static void drawTiles(iView *player)
 			}
 		}
 	}
+	pie_FlushWater();
 	pie_SetDepthOffset(0.0f);
 	pie_SetRendMode(REND_GOURAUD_TEX);
 	pie_SetAlphaTest(true);
 	pie_TranslateTextureEnd();
+	WZPROF_END(PROF_WATER);
 
 	targetOpenList((BASE_OBJECT*)driveGetDriven());
 
 	/* ---------------------------------------------------------------- */
 	/* Now display all the static objects                               */
 	/* ---------------------------------------------------------------- */
+	WZPROF_BEGIN(PROF_OBJECTS);
 	displayStaticObjects(); // bucket render implemented
 	displayFeatures(); // bucket render implemented
 	displayDynamicObjects(); //bucket render implemented
@@ -1092,6 +1109,7 @@ static void drawTiles(iView *player)
 	bucketRenderCurrentList();
 	displayBlueprints();
 	pie_RemainingPasses();
+	WZPROF_END(PROF_OBJECTS);
 	pie_EndLighting();
 
 	targetCloseList();
@@ -3847,8 +3865,12 @@ static void locateMouse(void)
 				quad.coords[3].x = tileScreenInfo[i+1][j+0].screen.x;
 				quad.coords[3].y = tileScreenInfo[i+1][j+0].screen.y;
 
-				/* We've got a match for our mouse coords */
-				if (inQuad(&pt, &quad))
+				/* We've got a match for our mouse coords (the bounding box first, as it is cheap) */
+				if (pt.x >= MIN(MIN(quad.coords[0].x, quad.coords[1].x), MIN(quad.coords[2].x, quad.coords[3].x))
+				 && pt.x <= MAX(MAX(quad.coords[0].x, quad.coords[1].x), MAX(quad.coords[2].x, quad.coords[3].x))
+				 && pt.y >= MIN(MIN(quad.coords[0].y, quad.coords[1].y), MIN(quad.coords[2].y, quad.coords[3].y))
+				 && pt.y <= MAX(MAX(quad.coords[0].y, quad.coords[1].y), MAX(quad.coords[2].y, quad.coords[3].y))
+				 && inQuad(&pt, &quad))
 				{
 					mouseTileX = playerXTile + j;
 					mouseTileY = playerZTile + i;
@@ -4102,7 +4124,17 @@ static void drawTerrainTile(UDWORD i, UDWORD j, BOOL onWaterEdge)
 	/* Check for rotations and flips - this sets up the coordinates for texturing */
 	setTexCoords(tileNumber, i, j);
 
-	/* The first triangle */
+	if (!onWaterEdge)
+	{
+		const TERRAIN_VERTEX *corner[4] = {&tileScreenInfo[i][j], &tileScreenInfo[i][j + 1],
+		                                   &tileScreenInfo[i + 1][j], &tileScreenInfo[i + 1][j + 1]};
+		const PIELIGHT light[4] = {colour[0][0], colour[0][1], colour[1][0], colour[1][1]};
+
+		pie_DrawTerrainTile(i, j, corner, light, psTile && TRI_FLIPPED(psTile));
+		return;
+	}
+
+	/* Water edges: the first triangle */
 	vertices[0] = tileScreenInfo[i + 0][j + 0];
 	vertices[1] = tileScreenInfo[i + 0][j + 1];
 	vertices[0].light = colour[0][0];
@@ -4119,14 +4151,7 @@ static void drawTerrainTile(UDWORD i, UDWORD j, BOOL onWaterEdge)
 		vertices[2].light = colour[1][1];
 	}
 
-	if (onWaterEdge)
-	{
-		pie_DrawWaterTriangle(vertices);
-	}
-	else
-	{
-		pie_DrawTerrainTriangle(i, j, 0, vertices);
-	}
+	pie_DrawWaterTriangle(vertices);
 
 	/* The second triangle */
 	if (psTile && TRI_FLIPPED(psTile))
@@ -4145,14 +4170,7 @@ static void drawTerrainTile(UDWORD i, UDWORD j, BOOL onWaterEdge)
 	vertices[1].light = colour[1][1];
 	vertices[2].light = colour[1][0];
 
-	if (onWaterEdge)
-	{
-		pie_DrawWaterTriangle(vertices);
-	}
-	else
-	{
-		pie_DrawTerrainTriangle(i, j, 1, vertices);
-	}
+	pie_DrawWaterTriangle(vertices);
 }
 
 

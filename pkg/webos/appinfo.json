@@ -4,7 +4,7 @@
 	"main": "warzone2100",
 	"icon": "icon.png",
 	"id": "org.wz2100.warzone2100",
-	"version": "2.3.0",
+	"version": "2.3.1",
 	"vendor": "Warzone 2100 Project",
 	"requiredMemory": 64
 }

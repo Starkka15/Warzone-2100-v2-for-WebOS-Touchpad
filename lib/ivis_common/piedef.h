@@ -100,8 +100,10 @@ extern void pie_DrawImage(const PIEIMAGE *image, const PIERECT *dest);
 void pie_TerrainInit(int sizex, int sizey);
 void pie_TerrainCleanup(void);
 void pie_DrawTerrain(int x1, int y1, int x2, int y2);
-void pie_DrawTerrainTriangle(int x, int y, int triangle, const TERRAIN_VERTEX *aVrts);
+/// A land tile at x, y of the grid in view; corners top left, top right, bottom left, bottom right
+void pie_DrawTerrainTile(int x, int y, const TERRAIN_VERTEX *corner[4], const PIELIGHT light[4], BOOL flipped);
 void pie_DrawWaterTriangle(const TERRAIN_VERTEX *aVrts);
+void pie_FlushWater(void);	// draws the water triangles queued so far; call before changing GL state
 
 extern void pie_GetResetCounts(unsigned int* pPieCount, unsigned int* pTileCount, unsigned int* pPolyCount, unsigned int* pStateCount);
 

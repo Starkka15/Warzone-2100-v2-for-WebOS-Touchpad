@@ -16,8 +16,8 @@
 extern "C" {
 #endif
 
-/* Maximum vertices per immediate mode batch */
-#define GLES_MAX_VERTICES 64
+/* Maximum vertices per immediate mode batch (a multiple of 4, for GL_QUADS) */
+#define GLES_MAX_VERTICES 1024
 
 /* Vertex buffer for immediate mode emulation */
 typedef struct {
@@ -60,6 +60,79 @@ void glesTexCoord2fv(const GLfloat *v);
 
 void glesNormal3fv(const GLfloat *v);
 
+/* Client array state, cached so repeated enables and disables cost nothing */
+void glesEnableClientState(GLenum array);
+void glesDisableClientState(GLenum array);
+
+/* Draw calls, counted and timed when WZ_PROFILE is set */
+void glesDrawArrays(GLenum mode, GLint first, GLsizei count);
+void glesDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices);
+
+/* Draw call merging (see gles_compat.c): triangles from glBegin/glEnd and
+ * glesBatchTriangles collect in one batch, drawn when GL state changes. */
+void glesFlushBatch(void);
+/* Texture coordinates given from now on become tc * scale + offset (for pages
+ * in the model texture atlas, tex.c) */
+void glesSetTexTransform(GLfloat scaleU, GLfloat scaleV, GLfloat offsetU, GLfloat offsetV);
+/* Adds n vertices (3 triangles' worth each), in object space, with texcoords
+ * and one colour for all, to the batch */
+void glesBatchTriangles(int n, const GLfloat *pos, const GLfloat *tex, const GLubyte colour[4]);
+
+/* State changes: each draws the batch first, unless it changes nothing */
+void glesEnable(GLenum cap);
+void glesDisable(GLenum cap);
+GLboolean glesIsEnabled(GLenum cap);
+void glesBindTexture(GLenum target, GLuint texture);
+void glesDeleteTextures(GLsizei n, const GLuint *textures);
+void glesBlendFunc(GLenum sfactor, GLenum dfactor);
+void glesDepthMask(GLboolean flag);
+void glesDepthFunc(GLenum func);
+void glesAlphaFunc(GLenum func, GLclampf ref);
+void glesCullFace(GLenum mode);
+void glesFrontFace(GLenum mode);
+void glesDepthRangef(GLclampf zNear, GLclampf zFar);
+void glesPolygonOffset(GLfloat factor, GLfloat units);
+void glesColorMask(GLboolean r, GLboolean g, GLboolean b, GLboolean a);
+void glesTexParameteri(GLenum target, GLenum pname, GLint param);
+void glesTexParameterf(GLenum target, GLenum pname, GLfloat param);
+void glesTexEnvf(GLenum target, GLenum pname, GLfloat param);
+void glesTexImage2D(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
+                    GLint border, GLenum format, GLenum type, const GLvoid *pixels);
+void glesTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width,
+                       GLsizei height, GLenum format, GLenum type, const GLvoid *pixels);
+void glesClear(GLbitfield mask);
+void glesFinish(void);
+void glesFlushGL(void);
+void glesReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLvoid *pixels);
+void glesScissor(GLint x, GLint y, GLsizei width, GLsizei height);
+void glesViewport(GLint x, GLint y, GLsizei width, GLsizei height);
+void glesFogf(GLenum pname, GLfloat param);
+void glesFogfv(GLenum pname, const GLfloat *params);
+void glesLightfv(GLenum light, GLenum pname, const GLfloat *params);
+void glesLightModelf(GLenum pname, GLfloat param);
+void glesLightModelfv(GLenum pname, const GLfloat *params);
+void glesMaterialf(GLenum face, GLenum pname, GLfloat param);
+void glesMaterialfv(GLenum face, GLenum pname, const GLfloat *params);
+void glesStencilFunc(GLenum func, GLint ref, GLuint mask);
+void glesStencilOp(GLenum fail, GLenum zfail, GLenum zpass);
+void glesStencilMask(GLuint mask);
+void glesHint(GLenum target, GLenum mode);
+void glesColor4fv(const GLfloat *v);
+
+/* Matrices: the batch is already in eye space, so only changes to the
+ * projection and texture matrices draw it */
+void glesMatrixMode(GLenum mode);
+void glesLoadIdentity(void);
+void glesLoadMatrixf(const GLfloat *m);
+void glesMultMatrixf(const GLfloat *m);
+void glesPushMatrix(void);
+void glesPopMatrix(void);
+void glesTranslatef(GLfloat x, GLfloat y, GLfloat z);
+void glesRotatef(GLfloat angle, GLfloat x, GLfloat y, GLfloat z);
+void glesScalef(GLfloat x, GLfloat y, GLfloat z);
+void glesOrthof(GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, GLfloat f);
+void glesFrustumf(GLfloat l, GLfloat r, GLfloat b, GLfloat t, GLfloat n, GLfloat f);
+
 /* Attribute stack emulation for glPushAttrib/glPopAttrib */
 #define GLES_ATTRIB_STACK_DEPTH 16
 
@@ -93,6 +166,58 @@ void glesPopAttrib(void);
 #define glTexCoord2f    glesTexCoord2f
 #define glTexCoord2fv   glesTexCoord2fv
 #define glNormal3fv     glesNormal3fv
+#define glEnableClientState  glesEnableClientState
+#define glDisableClientState glesDisableClientState
+#define glDrawArrays    glesDrawArrays
+#define glDrawElements  glesDrawElements
+#define glEnable        glesEnable
+#define glDisable       glesDisable
+#define glIsEnabled     glesIsEnabled
+#define glBindTexture   glesBindTexture
+#define glDeleteTextures glesDeleteTextures
+#define glBlendFunc     glesBlendFunc
+#define glDepthMask     glesDepthMask
+#define glDepthFunc     glesDepthFunc
+#define glAlphaFunc     glesAlphaFunc
+#define glCullFace      glesCullFace
+#define glFrontFace     glesFrontFace
+#define glDepthRangef   glesDepthRangef
+#define glPolygonOffset glesPolygonOffset
+#define glColorMask     glesColorMask
+#define glTexParameteri glesTexParameteri
+#define glTexParameterf glesTexParameterf
+#define glTexEnvf       glesTexEnvf
+#define glTexImage2D    glesTexImage2D
+#define glTexSubImage2D glesTexSubImage2D
+#define glClear         glesClear
+#define glFinish        glesFinish
+#define glFlush         glesFlushGL
+#define glReadPixels    glesReadPixels
+#define glScissor       glesScissor
+#define glViewport      glesViewport
+#define glFogf          glesFogf
+#define glFogfv         glesFogfv
+#define glLightfv       glesLightfv
+#define glLightModelf   glesLightModelf
+#define glLightModelfv  glesLightModelfv
+#define glMaterialf     glesMaterialf
+#define glMaterialfv    glesMaterialfv
+#define glStencilFunc   glesStencilFunc
+#define glStencilOp     glesStencilOp
+#define glStencilMask   glesStencilMask
+#define glHint          glesHint
+#define glColor4fv      glesColor4fv
+#define glMatrixMode    glesMatrixMode
+#define glLoadIdentity  glesLoadIdentity
+#define glLoadMatrixf   glesLoadMatrixf
+#define glMultMatrixf   glesMultMatrixf
+#define glPushMatrix    glesPushMatrix
+#define glPopMatrix     glesPopMatrix
+#define glTranslatef    glesTranslatef
+#define glRotatef       glesRotatef
+#define glScalef        glesScalef
+#define glOrthof        glesOrthof
+#define glFrustumf      glesFrustumf
 
 /* GL_QUADS not supported in GLES - will be converted to triangles */
 #ifndef GL_QUADS

@@ -77,15 +77,51 @@ static void processAVTile(UDWORD x, UDWORD y, float increment)
 // ------------------------------------------------------------------------------------
 void	avUpdateTiles( void )
 {
-	UDWORD	i, j;
 	float	increment = timeAdjustedIncrement(FADE_IN_TIME, true);	// call once per frame
+	MAPTILE	*psTile = psMapTiles, *psEnd = psMapTiles + mapWidth * mapHeight;
+	// What hasSensorOnTile() works out per tile, worked out once for the frame
+	const bool seeAll = getSatUplinkExists(selectedPlayer) || godMode;
+	bool allyUplink = false;
+	int allies[MAX_PLAYERS], nAllies = 0, k;
 
-	/* Go through the tiles */
-	for (i = 0; i < mapWidth; i++)
+	if (game.type != CAMPAIGN && game.alliance == ALLIANCES_TEAMS)
 	{
-		for (j = 0; j < mapHeight; j++)
+		for (k = 0; k < MAX_PLAYERS; k++)
 		{
-			processAVTile(i, j, increment);
+			if (aiCheckAlliances(k, selectedPlayer))
+			{
+				allyUplink = allyUplink || getSatUplinkExists(k);
+				allies[nAllies++] = k;
+			}
+		}
+	}
+
+	/* Go through the tiles, in the order they are stored; this is processAVTile() for every tile */
+	for (; psTile < psEnd; psTile++)
+	{
+		float maxLevel = psTile->illumination;
+		bool sensor;
+
+		if (bRevealActive && psTile->level == 0 && !tileIsExplored(psTile))	// stay unexplored
+		{
+			continue;
+		}
+		sensor = seeAll || allyUplink || psTile->watchers[selectedPlayer] != 0;
+		for (k = 0; !sensor && k < nAllies; k++)
+		{
+			sensor = psTile->watchers[allies[k]] > 0;
+		}
+		if (!sensor)
+		{
+			maxLevel /= 2;
+		}
+		if (psTile->level > maxLevel)
+		{
+			psTile->level = MAX(psTile->level - increment, 0);
+		}
+		else if (psTile->level < maxLevel)
+		{
+			psTile->level = MIN(psTile->level + increment, maxLevel);
 		}
 	}
 }

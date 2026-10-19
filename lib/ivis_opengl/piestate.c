@@ -163,6 +163,17 @@ void pie_SetTexturePage(SDWORD num)
 	// Only bind textures when they're not bound already
 	if (num != rendStates.texPage)
 	{
+#ifdef USE_GLES
+		if (num >= 0 && num < iV_TEX_MAX && _TEX_PAGE[num].atlasSlot > 0)
+		{
+			glesSetTexTransform(_TEX_PAGE[num].atlasScaleU, _TEX_PAGE[num].atlasScaleV,
+			                    _TEX_PAGE[num].atlasOffsetU, _TEX_PAGE[num].atlasOffsetV);
+		}
+		else
+		{
+			glesSetTexTransform(1, 1, 0, 0);
+		}
+#endif
 		switch (num)
 		{
 			case TEXPAGE_NONE:

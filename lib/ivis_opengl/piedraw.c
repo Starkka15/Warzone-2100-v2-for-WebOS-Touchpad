@@ -36,6 +36,7 @@
 #include "lib/ivis_common/pieclip.h"
 #include "piematrix.h"
 #include "screen.h"
+#include "lib/framework/wzprof.h"
 
 #define SHADOW_END_DISTANCE (8000*8000) // Keep in sync with lighting.c:FOG_END
 
@@ -46,11 +47,24 @@
 #define TRIANGLES_PER_TILE 2
 #define VERTICES_PER_TILE (TRIANGLES_PER_TILE * VERTICES_PER_TRIANGLE)
 
-static GLubyte *aColour = NULL;
-static GLfloat *aTexCoord = NULL;
-static GLfloat *aVertex = NULL;
+/* Terrain: the four corners of every tile in view, in one array the driver
+ * copies in one go (16 bytes a vertex: shorts, texcoords in 1/32768ths), and
+ * the triangles of the tiles drawn this frame as indices into it. Tiles not
+ * drawn get no triangles, so the corners need no clearing between frames. */
+typedef struct
+{
+	GLshort x, y, z, pad;
+	GLshort u, v;
+	GLubyte r, g, b, a;
+} TERRAIN_GL_VERTEX;
+
+#define TERRAIN_TEX_SCALE 32768.0f
+#define CORNERS_PER_TILE 4
+
+static TERRAIN_GL_VERTEX *aTerrain = NULL;
+static GLushort *aTerrainIndex = NULL;
+static unsigned int terrainIndices = 0;
 static GLint allocX = 0, allocY = 0;
-static size_t sizeColour = 0, sizeTexCoord = 0, sizeVertex = 0;
 
 extern BOOL drawing_interface;
 
@@ -128,6 +142,102 @@ static unsigned int nb_scshapes = 0;
 static transluscent_shape_t* tshapes = NULL;
 static unsigned int tshapes_size = 0;
 static unsigned int nb_tshapes = 0;
+
+#ifdef USE_GLES
+/* Triangles of the shape being drawn; they go to the GL batch (gles_compat.c)
+ * together instead of one draw per polygon */
+static GLfloat *shapeVertex = NULL;
+static GLfloat *shapeTexCoord = NULL;
+static unsigned int shapeAlloc = 0;	// in vertices
+static unsigned int shapeCount = 0;
+
+static void pie_FlushShapeBatch(PIELIGHT colour)
+{
+	if (shapeCount == 0)
+	{
+		return;
+	}
+	glesBatchTriangles(shapeCount, shapeVertex, shapeTexCoord, colour.vector);
+	shapeCount = 0;
+}
+
+/* Draws an unlit shape: each polygon fan becomes triangles. A polygon that is
+ * not to be culled is added twice, the second time facing the other way, so
+ * that culling can stay on (switching it would end the batch); from any side
+ * exactly one of the two is drawn, as an unculled polygon would be. */
+static void pie_DrawShapeBatched(iIMDShape *shape, const Vector3f *scrPoints, int frame, PIELIGHT colour)
+{
+	iIMDPoly *pPolys;
+	unsigned int need = 0;
+
+	for (pPolys = shape->polys; pPolys < shape->polys + shape->npolys; pPolys++)
+	{
+		if (pPolys->npnts >= 3)
+		{
+			need += (pPolys->npnts - 2) * VERTICES_PER_TRIANGLE * ((pPolys->flags & PIE_NO_CULL) ? 2 : 1);
+		}
+	}
+	if (need > shapeAlloc)
+	{
+		shapeAlloc = need * 2;
+		shapeVertex = realloc(shapeVertex, shapeAlloc * VERTEX_COMPONENTS * sizeof(GLfloat));
+		shapeTexCoord = realloc(shapeTexCoord, shapeAlloc * TEXCOORD_COMPONENTS * sizeof(GLfloat));
+		if (shapeVertex == NULL || shapeTexCoord == NULL)
+		{
+			debug(LOG_FATAL, "pie_DrawShapeBatched: Out of memory!");
+			abort();
+		}
+	}
+	shapeCount = 0;
+
+	for (pPolys = shape->polys; pPolys < shape->polys + shape->npolys; pPolys++)
+	{
+		const unsigned int sides = (pPolys->flags & PIE_NO_CULL) ? 2 : 1;
+		float uFrame = 0, vFrame = 0;
+		unsigned int n, t, side;
+
+		polyCount++;
+
+		if (pPolys->npnts < 3)
+		{
+			continue;
+		}
+		if (frame != 0 && pPolys->flags & iV_IMD_TEXANIM)
+		{
+			frame %= pPolys->texAnim.nFrames;	// carries over to later polygons, as in the unbatched loop
+
+			if (frame > 0)
+			{
+				const int framesPerLine = 256 / pPolys->texAnim.textureWidth;
+				uFrame = (frame % framesPerLine) * pPolys->texAnim.textureWidth;
+				vFrame = (frame / framesPerLine) * pPolys->texAnim.textureHeight;
+			}
+		}
+
+		// fan 0,1,2 0,2,3 ... as triangles, and for the back side 0,2,1 0,3,2 ...
+		for (side = 0; side < sides; side++)
+		for (t = 1; t + 1 < pPolys->npnts; t++)
+		{
+			const unsigned int corner[3] = {0, side ? t + 1 : t, side ? t : t + 1};
+
+			for (n = 0; n < 3; n++)
+			{
+				const Vector3f *v = &scrPoints[pPolys->pindex[corner[n]]];
+				GLfloat *pos = &shapeVertex[shapeCount * VERTEX_COMPONENTS];
+				GLfloat *tex = &shapeTexCoord[shapeCount * TEXCOORD_COMPONENTS];
+
+				pos[0] = v->x;
+				pos[1] = v->y;
+				pos[2] = v->z;
+				tex[0] = pPolys->texCoord[corner[n]].x + uFrame;
+				tex[1] = pPolys->texCoord[corner[n]].y + vFrame;
+				shapeCount++;
+			}
+		}
+	}
+	pie_FlushShapeBatch(colour);
+}
+#endif
 
 static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, WZ_DECL_UNUSED PIELIGHT specular, int pieFlag, int pieFlagData)
 {
@@ -223,6 +333,13 @@ static void pie_Draw3DShape2(iIMDShape *shape, int frame, PIELIGHT colour, WZ_DE
 
 	glColor4ubv(colour.vector);	// Only need to set once for entire model
 
+#ifdef USE_GLES
+	if (!light)
+	{
+		pie_DrawShapeBatched(shape, scrPoints, frame, colour);
+	}
+	else
+#endif
 	for (pPolys = shape->polys;
 			pPolys < shape->polys + shape->npolys;
 			pPolys++)
@@ -798,98 +915,158 @@ void pie_DrawImage(const PIEIMAGE *image, const PIERECT *dest)
 	glEnd();
 }
 
-static inline void pie_ClearArrays(void)
-{
-	memset(aColour, 0, sizeColour);
-	memset(aVertex, 0, sizeVertex);
-}
-
 void pie_TerrainInit(int sizex, int sizey)
 {
-	int size = sizex * sizey;
+	const int tiles = sizex * sizey;
 
 	assert(sizex > 0 && sizey > 0);
+	// indices are shorts
+	ASSERT(tiles * CORNERS_PER_TILE <= 65536, "pie_TerrainInit: %dx%d tiles is too many", sizex, sizey);
 	pie_TerrainCleanup();
-	sizeColour = size * sizeof(GLubyte) * COLOUR_COMPONENTS * VERTICES_PER_TILE;
-	sizeTexCoord = size * sizeof(GLfloat) * TEXCOORD_COMPONENTS * VERTICES_PER_TILE;
-	sizeVertex = size * sizeof(GLfloat) * VERTEX_COMPONENTS * VERTICES_PER_TILE;
-	aColour = malloc(sizeColour);
-	aTexCoord = malloc(sizeTexCoord);
-	aVertex = malloc(sizeVertex);
+	aTerrain = calloc(tiles * CORNERS_PER_TILE, sizeof(TERRAIN_GL_VERTEX));
+	aTerrainIndex = malloc(tiles * VERTICES_PER_TILE * sizeof(GLushort));
+	terrainIndices = 0;
 	allocX = sizex;
 	allocY = sizey;
-	pie_ClearArrays();	// hack, removes seams
 }
 
 void pie_TerrainCleanup()
 {
-	if (aColour)
-	{
-		free(aColour);
-	}
-	if (aTexCoord)
-	{
-		free(aTexCoord);
-	}
-	if (aVertex)
-	{
-		free(aVertex);
-	}
-	aColour = NULL;
-	aTexCoord = NULL;
-	aVertex = NULL;
+	free(aTerrain);
+	free(aTerrainIndex);
+	aTerrain = NULL;
+	aTerrainIndex = NULL;
+	terrainIndices = 0;
 }
 
 void pie_DrawTerrain(int x1, int y1, int x2, int y2)
 {
-	int y;
+	const TERRAIN_GL_VERTEX *v = aTerrain;
 
 	assert(x1 >= 0 && y1 >= 0 && x2 < allocX && y2 < allocY);
+	(void)x1; (void)y1; (void)x2; (void)y2;	// the tiles drawn are the ones given to pie_DrawTerrainTile
+	if (terrainIndices == 0)
+	{
+		return;
+	}
+	glDisableClientState(GL_NORMAL_ARRAY);
 	glEnableClientState(GL_COLOR_ARRAY);
 	glEnableClientState(GL_VERTEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glColorPointer(COLOUR_COMPONENTS, GL_UNSIGNED_BYTE, 0, aColour);
-	glTexCoordPointer(TEXCOORD_COMPONENTS, GL_FLOAT, 0, aTexCoord);
-	glVertexPointer(VERTEX_COMPONENTS, GL_FLOAT, 0, aVertex);
+	glVertexPointer(VERTEX_COMPONENTS, GL_SHORT, sizeof(*v), &v->x);
+	glTexCoordPointer(TEXCOORD_COMPONENTS, GL_SHORT, sizeof(*v), &v->u);
+	glColorPointer(COLOUR_COMPONENTS, GL_UNSIGNED_BYTE, sizeof(*v), &v->r);
 	glMatrixMode(GL_TEXTURE);
 	glPushMatrix();
 	glLoadIdentity();
-	for (y = y1; y < y2; y++)
-	{
-		glDrawArrays(GL_TRIANGLES, (y * allocX + x1) * VERTICES_PER_TILE, (x2 - x1) * VERTICES_PER_TILE);
-	}
+	glScalef(1.0f / TERRAIN_TEX_SCALE, 1.0f / TERRAIN_TEX_SCALE, 1.0f);
+	WZPROF_BEGIN(PROF_TSUBMIT);
+	glDrawElements(GL_TRIANGLES, terrainIndices, GL_UNSIGNED_SHORT, aTerrainIndex);
+	WZPROF_END(PROF_TSUBMIT);
 	glPopMatrix();
-	pie_ClearArrays();
+	terrainIndices = 0;
 	glDisableClientState(GL_COLOR_ARRAY);
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 	glMatrixMode(GL_MODELVIEW);
 }
 
-// index gives us the triangle
-void pie_DrawTerrainTriangle(int x, int y, int triangle, const TERRAIN_VERTEX *aVrts)
+static inline GLshort terrainTexCoord(float t)
 {
-	int i, j;
+	const float scaled = t * TERRAIN_TEX_SCALE + 0.5f;
 
-	assert(x >= 0 && y >= 0 && triangle >= 0 && triangle < 3 && aVrts);
+	return scaled <= 0 ? 0 : scaled >= 32767 ? 32767 : (GLshort)scaled;
+}
 
-	j = (y * allocX + x) * VERTICES_PER_TILE + triangle * VERTICES_PER_TRIANGLE;
+/* corner: 0 top left, 1 top right, 2 bottom left, 3 bottom right */
+void pie_DrawTerrainTile(int x, int y, const TERRAIN_VERTEX *corner[4], const PIELIGHT light[4], BOOL flipped)
+{
+	// the two triangles, as the tile's flip flag has them
+	static const GLushort normal[VERTICES_PER_TILE] = {0, 1, 3, 0, 3, 2};
+	static const GLushort flip[VERTICES_PER_TILE] = {0, 1, 2, 1, 3, 2};
+	const GLushort *order = flipped ? flip : normal;
+	const unsigned int base = (y * allocX + x) * CORNERS_PER_TILE;
+	TERRAIN_GL_VERTEX *v = &aTerrain[base];
+	int i;
+
+	assert(x >= 0 && y >= 0 && x < allocX && y < allocY);
+
+	tileCount += TRIANGLES_PER_TILE;
+
+	for (i = 0; i < CORNERS_PER_TILE; i++)
+	{
+		v[i].x = corner[i]->pos.x;
+		v[i].y = corner[i]->pos.y;
+		v[i].z = corner[i]->pos.z;
+		v[i].u = terrainTexCoord(corner[i]->u);
+		v[i].v = terrainTexCoord(corner[i]->v);
+		v[i].r = light[i].byte.r;
+		v[i].g = light[i].byte.g;
+		v[i].b = light[i].byte.b;
+		v[i].a = light[i].byte.a;
+	}
+	for (i = 0; i < VERTICES_PER_TILE; i++)
+	{
+		aTerrainIndex[terrainIndices++] = base + order[i];
+	}
+}
+
+#ifdef USE_GLES
+/* Water triangles, queued and drawn together by pie_FlushWater */
+#define WATER_BATCH_VERTICES (VERTICES_PER_TRIANGLE * 1024)
+static GLfloat waterVertex[WATER_BATCH_VERTICES * VERTEX_COMPONENTS];
+static GLfloat waterTexCoord[WATER_BATCH_VERTICES * TEXCOORD_COMPONENTS];
+static GLubyte waterColour[WATER_BATCH_VERTICES * COLOUR_COMPONENTS];
+static unsigned int waterCount = 0;
+
+void pie_FlushWater(void)
+{
+	if (waterCount == 0)
+	{
+		return;
+	}
+	glDisableClientState(GL_NORMAL_ARRAY);
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+	glVertexPointer(VERTEX_COMPONENTS, GL_FLOAT, 0, waterVertex);
+	glTexCoordPointer(TEXCOORD_COMPONENTS, GL_FLOAT, 0, waterTexCoord);
+	glColorPointer(COLOUR_COMPONENTS, GL_UNSIGNED_BYTE, 0, waterColour);
+	glDrawArrays(GL_TRIANGLES, 0, waterCount);
+	waterCount = 0;
+}
+
+void pie_DrawWaterTriangle(const TERRAIN_VERTEX *aVrts)
+{
+	unsigned int i;
 
 	tileCount++;
 
-	for ( i = 0; i < 3; i++ )
+	if (waterCount + VERTICES_PER_TRIANGLE > WATER_BATCH_VERTICES)
 	{
-		aColour[j * COLOUR_COMPONENTS + 0] = aVrts[i].light.byte.r;
-		aColour[j * COLOUR_COMPONENTS + 1] = aVrts[i].light.byte.g;
-		aColour[j * COLOUR_COMPONENTS + 2] = aVrts[i].light.byte.b;
-		aColour[j * COLOUR_COMPONENTS + 3] = aVrts[i].light.byte.a;
-		aTexCoord[j * TEXCOORD_COMPONENTS + 0] = aVrts[i].u;
-		aTexCoord[j * TEXCOORD_COMPONENTS + 1] = aVrts[i].v;
-		aVertex[j * VERTEX_COMPONENTS + 0] = aVrts[i].pos.x;
-		aVertex[j * VERTEX_COMPONENTS + 1] = aVrts[i].pos.y;
-		aVertex[j * VERTEX_COMPONENTS + 2] = aVrts[i].pos.z;
-		j++;
+		pie_FlushWater();
 	}
+	for (i = 0; i < VERTICES_PER_TRIANGLE; i++)
+	{
+		GLfloat *pos = &waterVertex[waterCount * VERTEX_COMPONENTS];
+		GLfloat *tex = &waterTexCoord[waterCount * TEXCOORD_COMPONENTS];
+		GLubyte *col = &waterColour[waterCount * COLOUR_COMPONENTS];
+
+		pos[0] = aVrts[i].pos.x;
+		pos[1] = aVrts[i].pos.y;
+		pos[2] = aVrts[i].pos.z;
+		tex[0] = aVrts[i].u;
+		tex[1] = aVrts[i].v;
+		col[0] = aVrts[i].light.byte.r;
+		col[1] = aVrts[i].light.byte.g;
+		col[2] = aVrts[i].light.byte.b;
+		col[3] = aVrts[i].light.byte.a;
+		waterCount++;
+	}
+}
+#else
+void pie_FlushWater(void)
+{
 }
 
 void pie_DrawWaterTriangle(const TERRAIN_VERTEX *aVrts)
@@ -908,6 +1085,7 @@ void pie_DrawWaterTriangle(const TERRAIN_VERTEX *aVrts)
 		}
 	glEnd();
 }
+#endif
 
 void pie_GetResetCounts(unsigned int* pPieCount, unsigned int* pTileCount, unsigned int* pPolyCount, unsigned int* pStateCount)
 {

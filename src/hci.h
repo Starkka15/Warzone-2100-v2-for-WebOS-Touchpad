@@ -60,6 +60,8 @@
 #define IDSCROLL_DOWN			16		// scroll down button
 #define IDZOOM_IN				17		// zoom in button
 #define IDZOOM_OUT				18		// zoom out button
+#define IDTOUCH_MODE			19		// toggles the arrow buttons between scrolling and rotating the camera
+#define IDTOUCH_CLICK			20		// toggles taps on the map between left and right clicks
 
 #define IDPOW_POWERBAR_T		102		// power bar - trough
 #define	IDTRANTIMER_BUTTON		11012	//transporter button on timer display

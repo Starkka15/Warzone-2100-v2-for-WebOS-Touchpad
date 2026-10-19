@@ -26,6 +26,7 @@
 #include "lib/framework/frame.h"
 #include "lib/framework/input.h"
 #include "lib/framework/strres.h"
+#include "lib/framework/wzprof.h"
 
 #include "lib/ivis_common/rendmode.h"
 #include "lib/ivis_common/piestate.h" //ivis render code
@@ -138,6 +139,69 @@ SDWORD	nextMissionType = LDS_NONE;//MISSION_NONE;
 UDWORD	mcTime;
 
 /* The main game loop */
+int wzProfOn = -1;	// -1 until the environment is checked
+double wzProfTotal[PROF_ALL];
+double wzProfStart[PROF_ALL];
+unsigned int wzProfDrawCalls = 0;
+
+void wzProfFrame(unsigned int pies, unsigned int polys, unsigned int tiles, unsigned int states)
+{
+	static const char *names[PROF_COUNT] = {"gpu", "swap", "logic", "sky", "terrain", "effects", "tdraw", "water", "objects", "hud", "ui"};
+	static double frameStart = 0, sumPies = 0, sumPolys = 0, sumTiles = 0, sumStates = 0, sumDraws = 0;
+	static unsigned int frames = 0;
+	double now, elapsed, staged = 0;
+	char line[512];
+	int i, n;
+
+	if (wzProfOn < 0)
+	{
+		wzProfOn = getenv("WZ_PROFILE") != NULL;
+	}
+	if (!wzProfOn)
+	{
+		return;
+	}
+	now = wzProfNow();
+	if (frameStart == 0)
+	{
+		frameStart = now;
+		return;
+	}
+	frames++;
+	sumPies += pies;
+	sumPolys += polys;
+	sumTiles += tiles;
+	sumStates += states;
+	sumDraws += wzProfDrawCalls;
+	wzProfDrawCalls = 0;
+	if (frames < 100)
+	{
+		return;
+	}
+
+	elapsed = now - frameStart;
+	n = snprintf(line, sizeof(line), "prof: fps %.1f frame %.1fms |", frames * 1000.0 / elapsed, elapsed / frames);
+	for (i = 0; i < PROF_COUNT; i++)
+	{
+		staged += wzProfTotal[i];
+		n += snprintf(line + n, sizeof(line) - n, " %s %.1f", names[i], wzProfTotal[i] / frames);
+		wzProfTotal[i] = 0;
+	}
+	snprintf(line + n, sizeof(line) - n, " other %.1f | draws %.0f in %.1fms (terrain %.1f) | pies %.0f polys %.0f tiles %.0f states %.0f",
+	         (elapsed - staged) / frames, sumDraws / frames, wzProfTotal[PROF_DRAWCALL] / frames, wzProfTotal[PROF_TSUBMIT] / frames,
+	         sumPies / frames, sumPolys / frames, sumTiles / frames, sumStates / frames);
+	wzProfTotal[PROF_DRAWCALL] = 0;
+	wzProfTotal[PROF_TSUBMIT] = 0;
+#ifdef USE_GLES
+	glesProfReport(frames);
+#endif
+	fprintf(stderr, "%s\n", line);
+
+	frames = 0;
+	sumPies = sumPolys = sumTiles = sumStates = sumDraws = 0;
+	frameStart = now;
+}
+
 GAMECODE gameLoop(void)
 {
 	DROID		*psCurr, *psNext;
@@ -173,6 +237,8 @@ GAMECODE gameLoop(void)
 		clearMode = CLEAR_BLACK;
 	}
 	pie_ScreenFlip(clearMode);//gameloopflip
+	wzProfFrame(loopPieCount, loopPolyCount, loopTileCount, loopStateChanges);
+	WZPROF_BEGIN(PROF_LOGIC);
 
 	HandleClosingWindows();	// Needs to be done outside the pause case.
 
@@ -595,6 +661,7 @@ GAMECODE gameLoop(void)
 			{
 				processMouseClickInput();
 			}
+			WZPROF_END(PROF_LOGIC);
 			displayWorld();
 		}
 		/* Display the in game interface */
@@ -609,7 +676,9 @@ GAMECODE gameLoop(void)
 
 		if(getWidgetsStatus())
 		{
+			WZPROF_BEGIN(PROF_UI);
 			intDisplayWidgets();
+			WZPROF_END(PROF_UI);
 		}
 		pie_SetDepthBufferStatus(DEPTH_CMP_LEQ_WRT_ON);
 		pie_SetFogStatus(true);

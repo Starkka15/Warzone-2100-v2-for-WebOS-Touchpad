@@ -219,6 +219,7 @@ static BOOL touchScrollLeft = false;
 static BOOL touchScrollRight = false;
 static BOOL touchScrollUp = false;
 static BOOL touchScrollDown = false;
+static BOOL touchRotateMode = false;
 #endif
 
 BOOL	rotActive = false;
@@ -263,6 +264,16 @@ void setTouchScroll(BOOL left, BOOL right, BOOL up, BOOL down)
 	touchScrollRight = right;
 	touchScrollUp = up;
 	touchScrollDown = down;
+}
+
+BOOL getTouchRotateMode(void)
+{
+	return touchRotateMode;
+}
+
+void setTouchRotateMode(BOOL rotate)
+{
+	touchRotateMode = rotate;
 }
 #endif
 
@@ -1188,22 +1199,45 @@ void scroll(void)
 	}
 
 #ifdef USE_GLES
-	/* Touchscreen scroll buttons */
-	if (touchScrollLeft)
+	if (touchRotateMode)
 	{
-		mouseAtLeft = true;
+		/* Touchscreen arrow buttons turn and tilt the camera */
+		if (touchScrollLeft)
+		{
+			kf_RotateLeft();
+		}
+		if (touchScrollRight)
+		{
+			kf_RotateRight();
+		}
+		if (touchScrollUp)
+		{
+			kf_PitchBack();
+		}
+		if (touchScrollDown)
+		{
+			kf_PitchForward();
+		}
 	}
-	if (touchScrollRight)
+	else
 	{
-		mouseAtRight = true;
-	}
-	if (touchScrollUp)
-	{
-		mouseAtBottom = true;
-	}
-	if (touchScrollDown)
-	{
-		mouseAtTop = true;
+		/* Touchscreen scroll buttons */
+		if (touchScrollLeft)
+		{
+			mouseAtLeft = true;
+		}
+		if (touchScrollRight)
+		{
+			mouseAtRight = true;
+		}
+		if (touchScrollUp)
+		{
+			mouseAtBottom = true;
+		}
+		if (touchScrollDown)
+		{
+			mouseAtTop = true;
+		}
 	}
 #endif
 	/* Time to update scroll - change to should be time */

@@ -46,6 +46,97 @@ unsigned int _TEX_INDEX;
 
 static void pie_PrintLoadedTextures(void);
 
+#ifdef USE_GLES
+/*
+ * Model texture atlas
+ * Each model part has a texture page of its own and a droid's body,
+ * propulsion and weapon are on different pages, so drawing models switched
+ * texture all the time, and every switch costs a draw call (see the batching
+ * in gles_compat.c). Model pages of up to ATLAS_SLOT square go into slots of
+ * one big texture instead; selecting one sets the texture coordinate
+ * transform that maps its 0-256 coordinates into its slot.
+ */
+#define ATLAS_SIZE 2048
+#define ATLAS_SLOT 256
+#define ATLAS_PER_ROW (ATLAS_SIZE / ATLAS_SLOT)
+#define ATLAS_SLOTS (ATLAS_PER_ROW * ATLAS_PER_ROW)
+static GLuint atlasTexture = 0;
+static int atlasSlotsUsed = 0;
+
+/* Puts the image (already scaled to width x height) in an atlas slot of page i;
+ * false if it cannot go in the atlas */
+static bool atlasAdd(unsigned int i, const char *filename, int width, int height, unsigned int format, const unsigned char *bmp)
+{
+	unsigned char *rgba = NULL;
+	int slot, x, y;
+
+	// the skybox repeats its texture, which an atlas slot cannot
+	if (width > ATLAS_SLOT || height > ATLAS_SLOT || strncmp(filename, "page-25", 7) == 0)
+	{
+		return false;
+	}
+	if (_TEX_PAGE[i].atlasSlot > 0)
+	{
+		slot = _TEX_PAGE[i].atlasSlot - 1;	// a replaced page keeps its slot
+	}
+	else if (atlasSlotsUsed < ATLAS_SLOTS)
+	{
+		slot = atlasSlotsUsed++;
+	}
+	else
+	{
+		debug(LOG_TEXTURE, "texture atlas full; %s gets a texture of its own", filename);
+		return false;
+	}
+
+	if (atlasTexture == 0)
+	{
+		glGenTextures(1, &atlasTexture);
+		glBindTexture(GL_TEXTURE_2D, atlasTexture);
+		glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ATLAS_SIZE, ATLAS_SIZE, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	}
+	glBindTexture(GL_TEXTURE_2D, atlasTexture);
+
+	// GLES uploads only in the texture's own format
+	if (format != GL_RGBA)
+	{
+		int p;
+
+		rgba = malloc(width * height * 4);
+		for (p = 0; p < width * height; p++)
+		{
+			rgba[p * 4 + 0] = bmp[p * 3 + 0];
+			rgba[p * 4 + 1] = bmp[p * 3 + 1];
+			rgba[p * 4 + 2] = bmp[p * 3 + 2];
+			rgba[p * 4 + 3] = 255;
+		}
+		bmp = rgba;
+	}
+	x = (slot % ATLAS_PER_ROW) * ATLAS_SLOT;
+	y = (slot / ATLAS_PER_ROW) * ATLAS_SLOT;
+	glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, bmp);
+	free(rgba);
+
+	_TEX_PAGE[i].id = atlasTexture;
+	_TEX_PAGE[i].atlasSlot = slot + 1;
+	// texture coordinates are 0-256 whatever the page size, and the texture matrix scales by 1/256
+	_TEX_PAGE[i].atlasScaleU = (float)width / ATLAS_SIZE;
+	_TEX_PAGE[i].atlasScaleV = (float)height / ATLAS_SIZE;
+	_TEX_PAGE[i].atlasOffsetU = x * OLD_TEXTURE_SIZE_FIX / ATLAS_SIZE;
+	_TEX_PAGE[i].atlasOffsetV = y * OLD_TEXTURE_SIZE_FIX / ATLAS_SIZE;
+
+	// the binding changed behind pie_SetTexturePage's back
+	pie_SetTexturePage(TEXPAGE_NONE);
+	return true;
+}
+#endif
+
 //*************************************************************************
 
 
@@ -94,6 +185,42 @@ int pie_AddTexPage(iV_Image *s, const char* filename, int slot, int maxTextureSi
 	/* Stick the name into the tex page structures */
 	sstrcpy(_TEX_PAGE[i].name, filename);
 
+#ifdef USE_GLES
+	if (maxTextureSize)
+	{
+		int w = s->width, h = s->height;
+		unsigned char *pixels = s->bmp;
+
+		if ((w & (w - 1)) == 0 && (h & (h - 1)) == 0)
+		{
+			if (w > maxTextureSize || h > maxTextureSize)
+			{
+				w = MIN(w, maxTextureSize);
+				h = MIN(h, maxTextureSize);
+				pixels = malloc(4 * w * h);
+				gluScaleImage(iV_getPixelFormat(s), s->width, s->height, GL_UNSIGNED_BYTE, s->bmp,
+				              w, h, GL_UNSIGNED_BYTE, pixels);
+			}
+			if (atlasAdd(i, filename, w, h, iV_getPixelFormat(s), pixels))
+			{
+				if (pixels != s->bmp)
+				{
+					free(pixels);
+				}
+				free(s->bmp);
+				s->bmp = NULL;
+				_TEX_INDEX++;	// as below
+				return i;
+			}
+			if (pixels != s->bmp)
+			{
+				free(pixels);
+			}
+		}
+	}
+	_TEX_PAGE[i].atlasSlot = 0;
+#endif
+
 	glGenTextures(1, &_TEX_PAGE[i].id);
 	// FIXME: This function is used instead of glBindTexture, but we're juggling with difficult to trace global state here. Look into pie_SetTexturePage's definition for details.
 	pie_SetTexturePage(i);
@@ -124,6 +251,10 @@ int pie_AddTexPage(iV_Image *s, const char* filename, int slot, int maxTextureSi
 
 		if (maxTextureSize)
 		{
+#ifdef USE_GLES
+			// 3D textures are drawn minified; GLES 1.1 builds their mipmaps on upload
+			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+#endif
 			// this is a 3D texture, use texture compression
 			gluBuild2DMipmaps(GL_TEXTURE_2D, wz_texture_compression, width, height, iV_getPixelFormat(s), GL_UNSIGNED_BYTE, bmp);
 		}
@@ -140,8 +271,8 @@ int pie_AddTexPage(iV_Image *s, const char* filename, int slot, int maxTextureSi
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 #ifdef USE_GLES
-	/* Use simpler filtering on GLES - mipmap generation may not be reliable */
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	/* Mipmaps only for 3D textures (see above); interface images are drawn 1:1 */
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, maxTextureSize ? GL_LINEAR_MIPMAP_NEAREST : GL_LINEAR);
 #else
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 #endif
@@ -253,6 +384,9 @@ int pie_ReplaceTexPage(iV_Image *s, const char *texPage, int maxTextureSize)
 		return -1;
 	}
 
+#ifdef USE_GLES
+	if (_TEX_PAGE[i].atlasSlot == 0)	// an atlas page is overwritten in its slot
+#endif
 	glDeleteTextures(1, &_TEX_PAGE[i].id);
 	debug(LOG_TEXTURE, "Reloading texture %s from index %d", texPage, i);
 	_TEX_PAGE[i].name[0] = '\0';
@@ -273,9 +407,25 @@ void pie_TexShutDown(void)
 
 	while (i < _TEX_INDEX)
 	{
+#ifdef USE_GLES
+		if (_TEX_PAGE[i].atlasSlot > 0)
+		{
+			_TEX_PAGE[i].atlasSlot = 0;
+			i++;
+			continue;
+		}
+#endif
 		glDeleteTextures(1, (GLuint *) &_TEX_PAGE[i].id);
 		i++;
 	}
+#ifdef USE_GLES
+	if (atlasTexture)
+	{
+		glDeleteTextures(1, &atlasTexture);
+		atlasTexture = 0;
+	}
+	atlasSlotsUsed = 0;
+#endif
 
 	debug(LOG_TEXTURE, "pie_TexShutDown successful - did free %u texture pages", i);
 }
@@ -286,6 +436,7 @@ void pie_TexInit(void)
 
 	while (i < iV_TEX_MAX) {
 		_TEX_PAGE[i].name[0] = '\0';
+		_TEX_PAGE[i].atlasSlot = 0;
 		i++;
 	}
 	debug(LOG_TEXTURE, "pie_TexInit successful - initialized %d texture pages\n", i);

@@ -112,8 +112,8 @@ static int newPage(const char *name, int level, int width, int height, int count
 
 	// debug(LOG_TEXTURE, "newPage: glTexImage2D(page=%d, level=%d) opengl id=%u", texPage, level, _TEX_PAGE[texPage].id);
 #ifdef USE_GLES
-	/* GLES 1.1: Use GL_RGBA for both internal and external format, no mipmaps */
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+	/* GLES 1.1: Use GL_RGBA for both internal and external format */
+	glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, width, height, 0,
 	             GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 #else
 	glTexImage2D(GL_TEXTURE_2D, level, wz_texture_compression, width, height, 0,
@@ -121,7 +121,9 @@ static int newPage(const char *name, int level, int width, int height, int count
 #endif
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 #ifdef USE_GLES
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	/* Nearest mip level, bilinear within it: most of the gain of mipmaps
+	 * (minified terrain stays in the texture cache) at the cost of one fetch */
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_NEAREST);
 #else
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 #endif
@@ -141,12 +143,50 @@ static int newPage(const char *name, int level, int width, int height, int count
 	return texPage;
 }
 
+#ifdef USE_GLES
+/* GLES 1.1 has no GL_TEXTURE_MAX_LEVEL, so a mipmapped texture needs every
+ * level down to 1x1. The tile sets give the first levels; this makes the rest
+ * from the smallest of them (an RGBA atlas of w x h at mip level 'level',
+ * overwritten while it works) and uploads them to the bound texture. */
+static void generateSmallerLevels(unsigned char *buf, int w, int h, int level)
+{
+	while (w > 1 || h > 1)
+	{
+		const int nw = MAX(1, w / 2), nh = MAX(1, h / 2);
+		const int dx = w > 1 ? 4 : 0, dy = h > 1 ? w * 4 : 0;
+		int x, y, c;
+
+		// in place: each output pixel lies at or before the pixels it averages
+		for (y = 0; y < nh; y++)
+		{
+			for (x = 0; x < nw; x++)
+			{
+				const unsigned char *p = &buf[((y * 2) * w + x * 2) * 4];
+
+				for (c = 0; c < 4; c++)
+				{
+					buf[(y * nw + x) * 4 + c] = (p[c] + p[dx + c] + p[dy + c] + p[dy + dx + c] + 2) / 4;
+				}
+			}
+		}
+		w = nw;
+		h = nh;
+		level++;
+		glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf);
+	}
+}
+#endif
+
 bool texLoad(const char *fileName)
 {
 	char fullPath[PATH_MAX], partialPath[PATH_MAX], *buffer;
 	unsigned int i, j, k, size;
 	int texPage;
 	GLint glval;
+#ifdef USE_GLES
+	unsigned char *smallest = NULL;	// CPU copy of the smallest tile-set level, for generateSmallerLevels
+	int smallestW = 0, smallestH = 0;
+#endif
 
 	firstPage = _TEX_INDEX;
 
@@ -179,22 +219,6 @@ bool texLoad(const char *fileName)
 		debug(LOG_TEXTURE, "Downgrading texture quality to %d due to user setting %d", mipmap_max, maxTextureSize);
 	}
 
-#ifdef USE_GLES
-	/*
-	 * GLES FIX: Only load mipmap level 0.
-	 *
-	 * On GLES, newPage() always creates texture level 0 regardless of the
-	 * 'level' parameter. This means each mipmap iteration would recreate
-	 * level 0 with progressively smaller sizes, overwriting the previous
-	 * content. By the end, the texture would contain only the smallest
-	 * mipmap tiles but tileTexInfo would have UV coords for the largest.
-	 *
-	 * Since we use GL_LINEAR (not GL_LINEAR_MIPMAP_LINEAR) on GLES anyway,
-	 * we only need the base mipmap level.
-	 */
-	mipmap_levels = 1;
-	debug(LOG_TEXTURE, "GLES: Using single mipmap level only");
-#endif
 
 	/* Get and set radar colours */
 
@@ -238,6 +262,15 @@ bool texLoad(const char *fileName)
 
 		// Generate the empty texture buffer in VRAM
 		texPage = newPage(fileName, j, xSize, ySize, 0);
+#ifdef USE_GLES
+		if (j == mipmap_levels - 1)
+		{
+			smallestW = xSize;
+			smallestH = ySize;
+			smallest = calloc(smallestW * smallestH, 4);
+			ASSERT_OR_RETURN(false, smallest, "Out of memory");
+		}
+#endif
 
 		sprintf(partialPath, "%s-%d", fileName, i);
 
@@ -261,6 +294,18 @@ bool texLoad(const char *fileName)
 			// Insert into texture page
 			glTexSubImage2D(GL_TEXTURE_2D, j, xOffset, yOffset, tile.width, tile.height,
 			                GL_RGBA, GL_UNSIGNED_BYTE, tile.bmp);
+#ifdef USE_GLES
+			if (smallest)
+			{
+				unsigned int row;
+
+				for (row = 0; row < tile.height && yOffset + row < smallestH; row++)
+				{
+					memcpy(&smallest[((yOffset + row) * smallestW + xOffset) * 4], &tile.bmp[row * tile.width * 4],
+					       MIN(tile.width, smallestW - xOffset) * 4);
+				}
+			}
+#endif
 			free(tile.bmp);
 			if (i == mipmap_max) // dealing with main texture page; so register coordinates
 			{
@@ -283,6 +328,13 @@ bool texLoad(const char *fileName)
 				yOffset = 0;
 				debug(LOG_TEXTURE, "texLoad: Extra page added at %d for %s, was page %d, opengl id %u",
 				      k, partialPath, texPage, _TEX_PAGE[texPage].id);
+#ifdef USE_GLES
+				if (smallest)
+				{
+					generateSmallerLevels(smallest, smallestW, smallestH, j);
+					memset(smallest, 0, smallestW * smallestH * 4);
+				}
+#endif
 				texPage = newPage(fileName, j, xSize, ySize, k);
 			}
 		}
@@ -290,6 +342,13 @@ bool texLoad(const char *fileName)
 		      k, partialPath, i, texPage, _TEX_PAGE[texPage].id);
 		i /= 2;	// halve the dimensions for the next series; OpenGL mipmaps start with largest at level zero
 	}
+#ifdef USE_GLES
+	if (smallest)
+	{
+		generateSmallerLevels(smallest, smallestW, smallestH, mipmap_levels - 1);
+		free(smallest);
+	}
+#endif
 
 	return true;
 }

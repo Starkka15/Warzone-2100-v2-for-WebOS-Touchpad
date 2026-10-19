@@ -462,9 +462,6 @@ static void initialize_ConfigDir(void)
 			exit(1);
 		}
 
-		debug(LOG_WZ, "Write dir: %s", PHYSFS_getWriteDir());
-		debug(LOG_WZ, "Base dir: %s", PHYSFS_getBaseDir());
-		return;
 #else
 		getPlatformUserDir(tmpstr, sizeof(tmpstr));
 

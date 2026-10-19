@@ -45,6 +45,11 @@ typedef struct
 {
 	char name[iV_TEXNAME_MAX];
 	GLuint id;
+	/* GLES: model pages share one atlas texture (tex.c); this is the page's
+	 * slot + 1 (0 when it has a texture of its own), and the transform that
+	 * takes its 0-256 texture coordinates to the atlas */
+	int atlasSlot;
+	float atlasScaleU, atlasScaleV, atlasOffsetU, atlasOffsetV;
 } iTexPage;
 
 //*************************************************************************

@@ -1903,6 +1903,14 @@ INT_RETVAL intRunWidgets(void)
 	case IDZOOM_OUT:
 		kf_ZoomOut();
 		break;
+	case IDTOUCH_MODE:
+		setTouchRotateMode(!getTouchRotateMode());
+		widgSetString(psWScreen, IDTOUCH_MODE, getTouchRotateMode() ? "ROTATE" : "SCROLL");
+		break;
+	case IDTOUCH_CLICK:
+		setRightClickOrders(!getRightClickOrders());
+		widgSetString(psWScreen, IDTOUCH_CLICK, getRightClickOrders() ? "RIGHT CLICK" : "LEFT CLICK");
+		break;
 #endif
 
 	/*Transporter button pressed - OFFWORLD Mission Maps ONLY *********/
@@ -3876,105 +3884,63 @@ BOOL intAddReticule(void)
 		}
 
 #ifdef USE_GLES
-		/* Menu button for touchscreen devices (no ESC key) */
-		sButInit.formID = 0;
-		sButInit.style = WBUT_PLAIN | WBUT_TXTCENTRE;
-		sButInit.id = IDMENU_BUTTON;
-		sButInit.x = pie_GetVideoBufferWidth() - 60;
-		sButInit.y = 10;
-		sButInit.width = 50;
-		sButInit.height = 20;
-		sButInit.pTip = _("Menu");
-		sButInit.FontID = font_regular;
-		sButInit.pText = "MENU";
-		sButInit.pDisplay = intDisplayTouchButton;
-		sButInit.UserData = 0;
-		if (!widgAddButton(psWScreen, &sButInit))
+		/* Touch controls. MENU (there is no ESC key) is in the top left; the
+		 * rest are one cluster in the bottom right, sized for fingers:
+		 *     [ LEFT CLICK / RIGHT CLICK ]
+		 *     [   SCROLL   /   ROTATE    ]
+		 *     [ < ]   [ ^ ]   [ > ]
+		 *     [ + ]   [ v ]   [ - ]
+		 * The toggles show the current mode, which carries over when the
+		 * reticule is rebuilt (the click mode is the RightClickOrders setting). */
 		{
-			return false;
-		}
+			const int key = 80, gap = 5, wide = 3 * key + 2 * gap, toggle = 50;
+			const int right = pie_GetVideoBufferWidth() - 10, bottom = pie_GetVideoBufferHeight() - 10;
+			const int left = right - wide;
+			const int row4 = bottom - key, row3 = row4 - gap - key;
+			const int row2 = row3 - gap - toggle, row1 = row2 - gap - toggle;
+			const struct { int id; int x, y, w, h; const char *tip, *text; } touch[] =
+			{
+				{IDMENU_BUTTON,  10, 10, 98, 40, N_("Menu"), "MENU"},
+				{IDTOUCH_CLICK,  left, row1, wide, toggle, N_("Taps on the map left or right click"),
+				 NULL},
+				{IDTOUCH_MODE,   left, row2, wide, toggle, N_("Arrows scroll or rotate the camera"),
+				 NULL},
+				{IDSCROLL_LEFT,  left, row3, key, key, N_("Scroll Left"), "<"},
+				{IDSCROLL_UP,    left + key + gap, row3, key, key, N_("Scroll Up"), "^"},
+				{IDSCROLL_RIGHT, left + 2 * (key + gap), row3, key, key, N_("Scroll Right"), ">"},
+				{IDZOOM_IN,      left, row4, key, key, N_("Zoom In"), "+"},
+				{IDSCROLL_DOWN,  left + key + gap, row4, key, key, N_("Scroll Down"), "v"},
+				{IDZOOM_OUT,     left + 2 * (key + gap), row4, key, key, N_("Zoom Out"), "-"},
+			};
+			unsigned int t;
 
-		/* Scroll buttons on screen edges */
-		sButInit.style = WBUT_PLAIN | WBUT_TXTCENTRE;
-		sButInit.FontID = font_regular;
-		sButInit.pDisplay = intDisplayTouchButton;
-		sButInit.UserData = 0;
-
-		/* Left arrow - left edge, middle height */
-		sButInit.id = IDSCROLL_LEFT;
-		sButInit.x = 5;
-		sButInit.y = pie_GetVideoBufferHeight() / 2 - 20;
-		sButInit.width = 40;
-		sButInit.height = 40;
-		sButInit.pTip = _("Scroll Left");
-		sButInit.pText = "<";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
-		}
-
-		/* Right arrow - right edge, middle height */
-		sButInit.id = IDSCROLL_RIGHT;
-		sButInit.x = pie_GetVideoBufferWidth() - 45;
-		sButInit.y = pie_GetVideoBufferHeight() / 2 - 20;
-		sButInit.width = 40;
-		sButInit.height = 40;
-		sButInit.pTip = _("Scroll Right");
-		sButInit.pText = ">";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
-		}
-
-		/* Up arrow - top edge, middle width */
-		sButInit.id = IDSCROLL_UP;
-		sButInit.x = pie_GetVideoBufferWidth() / 2 - 20;
-		sButInit.y = 5;
-		sButInit.width = 40;
-		sButInit.height = 40;
-		sButInit.pTip = _("Scroll Up");
-		sButInit.pText = "^";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
-		}
-
-		/* Down arrow - bottom edge, middle width */
-		sButInit.id = IDSCROLL_DOWN;
-		sButInit.x = pie_GetVideoBufferWidth() / 2 - 20;
-		sButInit.y = pie_GetVideoBufferHeight() - 45;
-		sButInit.width = 40;
-		sButInit.height = 40;
-		sButInit.pTip = _("Scroll Down");
-		sButInit.pText = "v";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
-		}
-
-		/* Zoom buttons - top right, below menu */
-		sButInit.id = IDZOOM_IN;
-		sButInit.x = pie_GetVideoBufferWidth() - 60;
-		sButInit.y = 40;
-		sButInit.width = 25;
-		sButInit.height = 25;
-		sButInit.pTip = _("Zoom In");
-		sButInit.pText = "+";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
-		}
-
-		sButInit.id = IDZOOM_OUT;
-		sButInit.x = pie_GetVideoBufferWidth() - 30;
-		sButInit.y = 40;
-		sButInit.width = 25;
-		sButInit.height = 25;
-		sButInit.pTip = _("Zoom Out");
-		sButInit.pText = "-";
-		if (!widgAddButton(psWScreen, &sButInit))
-		{
-			return false;
+			sButInit.formID = 0;
+			sButInit.style = WBUT_PLAIN | WBUT_TXTCENTRE;
+			sButInit.FontID = font_regular;
+			sButInit.pDisplay = intDisplayTouchButton;
+			sButInit.UserData = 0;
+			for (t = 0; t < sizeof(touch) / sizeof(touch[0]); t++)
+			{
+				sButInit.id = touch[t].id;
+				sButInit.x = touch[t].x;
+				sButInit.y = touch[t].y;
+				sButInit.width = touch[t].w;
+				sButInit.height = touch[t].h;
+				sButInit.pTip = _(touch[t].tip);
+				sButInit.pText = touch[t].text;
+				if (touch[t].id == IDTOUCH_CLICK)
+				{
+					sButInit.pText = getRightClickOrders() ? "RIGHT CLICK" : "LEFT CLICK";
+				}
+				else if (touch[t].id == IDTOUCH_MODE)
+				{
+					sButInit.pText = getTouchRotateMode() ? "ROTATE" : "SCROLL";
+				}
+				if (!widgAddButton(psWScreen, &sButInit))
+				{
+					return false;
+				}
+			}
 		}
 #endif
 
@@ -3997,6 +3963,8 @@ void intRemoveReticule(void)
 		widgDelete(psWScreen,IDSCROLL_DOWN);
 		widgDelete(psWScreen,IDZOOM_IN);
 		widgDelete(psWScreen,IDZOOM_OUT);
+		widgDelete(psWScreen,IDTOUCH_MODE);
+		widgDelete(psWScreen,IDTOUCH_CLICK);
 #endif
 		ReticuleUp = false;
 	}

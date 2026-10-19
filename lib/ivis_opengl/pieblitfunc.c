@@ -163,7 +163,7 @@ void pie_ImageFileID(IMAGEFILE *ImageFile, UWORD ID, int x, int y)
 	PIEIMAGE pieImage;
 	PIERECT dest;
 
-	ASSERT_OR_RETURN(, ID < ImageFile->NumImages, "Out of range 1: %d", (int)ID);
+	ASSERT_OR_RETURN(, ID < ImageFile->NumImages, "Out of range 1: %d (caller %p)", (int)ID, __builtin_return_address(0));
 	Image = &ImageFile->ImageDefs[ID];
 
 	ASSERT_OR_RETURN(, Image->TPageID < MAX_NUM_TPAGEIDS, "Out of range 2: %d", (int)Image->TPageID);

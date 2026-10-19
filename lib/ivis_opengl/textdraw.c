@@ -325,37 +325,51 @@ void iV_DrawTextRotated(const char* string, float x, float y, float rotation)
 	/* Use the font colour */
 	glColor4f(font_colour[0], font_colour[1], font_colour[2], font_colour[3]);
 
-	while (*string) {
-		unsigned char c = (unsigned char)*string;
-		int charIdx;
-		float u, v;
+	/* The glyphs go to GL in batches of two triangles per character, drawn in
+	 * the current colour (no colour array) */
+	glDisableClientState(GL_COLOR_ARRAY);
+	glDisableClientState(GL_NORMAL_ARRAY);
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
-		/* Map character to font index (ASCII 32-127) */
-		if (c >= 32 && c < 128) {
-			charIdx = c - 32;
-		} else {
-			charIdx = '?' - 32; /* Unknown char = ? */
+	while (*string) {
+		enum { BATCH_CHARS = 128 };
+		GLfloat pos[BATCH_CHARS * 6 * 2], tex[BATCH_CHARS * 6 * 2];
+		int count = 0;
+
+		while (*string && count < BATCH_CHARS) {
+			unsigned char c = (unsigned char)*string;
+			int charIdx;
+			float u, v;
+			GLfloat *p = &pos[count * 12], *t = &tex[count * 12];
+
+			/* Map character to font index (ASCII 32-127) */
+			if (c >= 32 && c < 128) {
+				charIdx = c - 32;
+			} else {
+				charIdx = '?' - 32; /* Unknown char = ? */
+			}
+
+			u = (charIdx % 16) * texCharW;
+			v = (charIdx / 16) * texCharH;
+
+			/* y is the TOP of the character (like GLC does); corners
+			 * top-left, top-right, bottom-left, then bottom-left, top-right, bottom-right */
+			p[0] = curX;          p[1] = y;          t[0] = u;            t[1] = v;
+			p[2] = curX + charW;  p[3] = y;          t[2] = u + texCharW; t[3] = v;
+			p[4] = curX;          p[5] = y + charH;  t[4] = u;            t[5] = v + texCharH;
+			p[6] = curX;          p[7] = y + charH;  t[6] = u;            t[7] = v + texCharH;
+			p[8] = curX + charW;  p[9] = y;          t[8] = u + texCharW; t[9] = v;
+			p[10] = curX + charW; p[11] = y + charH; t[10] = u + texCharW; t[11] = v + texCharH;
+
+			count++;
+			curX += charW;
+			string++;
 		}
 
-		u = (charIdx % 16) * texCharW;
-		v = (charIdx / 16) * texCharH;
-
-		glBegin(GL_TRIANGLE_STRIP);
-			/* Set color AFTER glBegin to ensure hasColor flag is set in GLES compat layer */
-			glColor4f(font_colour[0], font_colour[1], font_colour[2], font_colour[3]);
-			/* Draw text with y as the TOP of the character (like GLC does) */
-			glTexCoord2f(u, v);
-			glVertex2f(curX, y);
-			glTexCoord2f(u + texCharW, v);
-			glVertex2f(curX + charW, y);
-			glTexCoord2f(u, v + texCharH);
-			glVertex2f(curX, y + charH);
-			glTexCoord2f(u + texCharW, v + texCharH);
-			glVertex2f(curX + charW, y + charH);
-		glEnd();
-
-		curX += charW;
-		string++;
+		glVertexPointer(2, GL_FLOAT, 0, pos);
+		glTexCoordPointer(2, GL_FLOAT, 0, tex);
+		glDrawArrays(GL_TRIANGLES, 0, count * 6);
 	}
 
 	/* Restore texture matrix */

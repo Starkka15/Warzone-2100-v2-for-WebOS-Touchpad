@@ -1,0 +1,25 @@
+#!/bin/sh
+# Post-install script for Warzone 2100
+# Moves game data to /media/internal
+
+APP_DIR="/media/cryptofs/apps/usr/palm/applications/org.wz2100.warzone2100"
+DEST_DIR="/media/internal/warzone"
+
+# Create destination if it doesn't exist
+mkdir -p "$DEST_DIR/maps" "$DEST_DIR/multiplay/players" "$DEST_DIR/savegame" "$DEST_DIR/screenshots"
+
+# Move warzone data folder to /media/internal; the player's own settings stay
+if [ -d "$APP_DIR/warzone" ]; then
+    for f in config keymap.map; do
+        if [ -f "$DEST_DIR/$f" ]; then
+            rm -f "$APP_DIR/warzone/$f"
+        fi
+    done
+    cp -r "$APP_DIR/warzone/"* "$DEST_DIR/"
+    rm -rf "$APP_DIR/warzone"
+fi
+
+# Set permissions
+chmod -R 755 "$DEST_DIR"
+
+exit 0

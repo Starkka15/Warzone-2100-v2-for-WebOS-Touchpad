@@ -327,6 +327,9 @@ bool screenInitialise(
 /* Swap buffers - wrapper for SDL */
 void screenSwapBuffers(void)
 {
+#ifdef USE_GLES
+	glesFlushBatch();	// what is still collected belongs to this frame
+#endif
 	SDL_GL_SwapBuffers();
 }
 

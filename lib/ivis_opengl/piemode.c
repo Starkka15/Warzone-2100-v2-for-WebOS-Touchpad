@@ -28,6 +28,7 @@
 
 #include "gl_compat.h"
 #include "lib/framework/frame.h"
+#include "lib/framework/wzprof.h"
 
 #include <SDL.h>
 
@@ -109,6 +110,13 @@ void pie_ScreenFlip(int clearMode)
 	GLbitfield clearFlags = 0;
 
 	screenDoDumpToDiskIfRequired();
+	if (wzProfOn > 0)
+	{
+		WZPROF_BEGIN(PROF_GPU);
+		glFinish();
+		WZPROF_END(PROF_GPU);
+	}
+	WZPROF_BEGIN(PROF_SWAP);
 	screenSwapBuffers();
 	if (!(clearMode & CLEAR_OFF_AND_NO_BUFFER_DOWNLOAD))
 	{
@@ -125,6 +133,7 @@ void pie_ScreenFlip(int clearMode)
 	{
 		glClear(clearFlags);
 	}
+	WZPROF_END(PROF_SWAP);
 	if (screen_GetBackDrop())
 	{
 		screen_Upload(NULL, screen_getMapPreview());
